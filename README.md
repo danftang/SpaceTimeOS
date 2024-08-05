@@ -1,2 +1,3 @@
 # SpaceTimeOS
-Experiments in distributed multi-agent computation.
+A computational paradigm for distributed multi-agent computation on
+agents in a spatial environment.

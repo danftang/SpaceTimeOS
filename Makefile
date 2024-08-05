@@ -2,7 +2,7 @@
 CPP_DIR = ./src
 
 #libraries to include (use -l<libraryname>)
-LIBS = # -lnlopt -lm
+LIBS = -pthread #-lnlopt -lm
 
 # name of the executable file to generate
 EXECUTABLE = a.out
@@ -27,7 +27,7 @@ CPP_FILES = $(wildcard $(CPP_DIR)/*.cpp) $(wildcard $(CPP_DIR)/**/*.cpp)
 OBJ_FILES = $(CPP_FILES:.cpp=.o)
 
 all: $(OBJ_FILES)
-	$(COMPILER) $(OBJ_FILES) $(LIBS) -o $(EXECUTABLE)
+	$(COMPILER) $(OBJ_FILES)  $(LIBS) -o $(EXECUTABLE)
 
 clean:
 	find $(CPP_DIR) -type f -name '*.o' -print -delete
