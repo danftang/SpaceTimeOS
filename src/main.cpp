@@ -1,14 +1,11 @@
 #include <iostream>
 #include <thread>
-#include <boost/asio.hpp>
-
-
-boost::asio::thread_pool pool(10);
+#include "ThreadPool.h"
 
 int main() {
 
     for (int i = 0; i < 10; ++i) {
-        boost::asio::post(pool, [i]() {
+        executor.submit([i]() {
             std::cout << "Task " << i << " executed by thread " << std::this_thread::get_id() << std::endl;
 //            std::cout << "Task " << i << std::endl;
         });
@@ -18,7 +15,7 @@ int main() {
     // std::cout << "Result = " << r1.get() << '\n';
 
     // // Optional: Wait for all tasks to complete
-    pool.join();
+    // pool.join();
 
     std::cout << "Goodbye world" << std::endl;
     return 0;

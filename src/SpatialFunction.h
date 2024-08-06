@@ -1,3 +1,6 @@
+#ifndef SPATIALFUNCTION_H
+#define SPATIALFUNCTION_H
+
 #include <functional>
 
 template<class T, class SPACETIME>
@@ -11,3 +14,4 @@ class SpatialFunction {
 
     bool isBlocking() { return !((bool)event); }
 };
+#endif

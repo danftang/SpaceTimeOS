@@ -1,7 +1,12 @@
+#ifndef CHANNEL_H
+#define CHANNEL_H
+
+
 #include <deque>
 #include <functional>
 #include "SpatialFunction.h"
 //#include "SpaceTimeObject.h"
+#include "ThreadPool.h"
 
 template<class T, class SPACETIME>
 class Channel {
@@ -23,7 +28,8 @@ public:
     void push(SpatialFunction<T,SPACETIME> &&event) {
         buffer.push_back(std::move(event));
         if(isBlocking) {
-            target.step();
+            executor.submit(target);
+            isBlocking = false;
         }
     }
 
@@ -49,4 +55,6 @@ const SpatialFunction<T, SPACETIME> & Channel<T, SPACETIME>::front()
         }
     }
     return buffer.front();
-}
+};
+#endif
+
