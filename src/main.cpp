@@ -1,6 +1,11 @@
 #include <iostream>
 #include <thread>
 #include "ThreadPool.h"
+#include "ReferenceFrame.h"
+
+template<ReferenceFrame T>
+void MyFunc(T obj) {
+}
 
 int main() {
 
