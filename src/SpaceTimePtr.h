@@ -1,42 +1,54 @@
-// A ptr can be captured in a lambda or held in an object. If captured in a lambda the blocking position should be
-// the position of emission until called, at which point it should be the position of the target object,
-// if held in an object, the blocking position should be that of the object.
-
 #ifndef SPACETIMEPTR_H
 #define SPACETIMEPTR_H
 
-#include <functional>
-#include "Channel.h"
+#include <vector>
 #include "SpaceTimeObject.h"
 
+template<class T, ReferenceFrame FRAME> class ChannelRef;
+
+// A smart pointer for use by a spatial funciton, to run on intersection with a spatial object.
 template<class T, ReferenceFrame FRAME>
 class SpaceTimePtr {
+protected:
+    SpaceTimeObject<T,FRAME> *ptr;
 public:
-    SpaceTimePtr(const SpaceTimePtr &)=delete; // no copy constructor
-    // SpaceTimePtr(const SpaceTimeBase<SPACETIME> &source, SpaceTimeObject<T,SPACETIME> &target) :
-    // channel(target.addChannel(source)) { }
+    template<class T2, ReferenceFrame FRAME2> friend class ChannelRef;
 
-    SpaceTimePtr(const SpaceTimeBase<FRAME> &source, SpaceTimePtr<T,FRAME> &targetPtr) :
-    channel(targetPtr.channel.target.addChannel(source)) { }
+    SpaceTimePtr(SpaceTimeObject<T,FRAME> *ptr): ptr(ptr) { }
 
-
-    // use this to make a new space-time agent (which is responsible for its own deletion)
-    SpaceTimePtr(const SpaceTimeBase T &&obj) {
-        auto pObj = new SpaceTimeObject<T,SPACETIME>(std::move(obj));
-        pObj->
+    T *operator ->() {
+        return &ptr->object;
     }
 
-    void send(SpatialFunction<T,SPACETIME> &sFunction); // code takes the target and returns a new 4-velocity
+    // Spawn a new SpaceTimeObject in the same reference frame
+    template<class NEWT>
+    SpaceTimePtr<NEWT, FRAME> spawn(NEWT &&newObject) {
+        return new SpaceTimeObject<NEWT,FRAME>(std::move(newObject), frame());
+    }
 
+    // Spawn in a new frame.
+    // If the frame is in the non-future, it will be created at the intersection of the newFrame with 
+    // this objects current light-cone.
+    template<class NEWT>
+    SpaceTimePtr<NEWT, FRAME> spawn(NEWT &&newObject, FRAME newFrame) {
+        auto createPosition = newFrame.intersection(frame().origin);
+        return SpaceTimePtr(new SpaceTimeObject(std::move(newObject), std::move(newFrame)));
+    }
+
+    // create a new (closed) channel to the target
+    ChannelRef<T,FRAME> newChannel() {
+        return ptr->newChannel();
+    }
+
+
+    // kill the referent
+    void kill() {
+        delete(ptr);
+        ptr = nullptr;
+    }
     
-protected:
-    Channel<T,FRAME> &  channel;
-//    SpaceTimeObject<T,SPACETIME> &       target;
+    FRAME &frame() { return ptr->frameOfReference; }
+
 };
-
-template<class T, ReferenceFrame FRAME>
-SpaceTimePtr<T,FRAME> newSpatialObject(FRAME frame, T &&obj) {
-    
-}
 
 #endif

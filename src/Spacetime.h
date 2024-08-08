@@ -11,10 +11,7 @@
 //  [A reference frame provides an intersection position given a call position. Intersection points have a complete ordering]
 //  []
 
-#include "SpaceTimePtr.h"
-
 class SpaceTime {
 public:
 
-
-}
+};
