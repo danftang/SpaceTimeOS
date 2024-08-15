@@ -1,0 +1,9 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/daniel/my/deselby-research/SpaceTimeOS",
+            "binaryPath": "/home/daniel/my/deselby-research/SpaceTimeOS/a.out",
+            "binaryArgs": []
+        }
+    ]
+}

@@ -14,8 +14,14 @@ public:
 
     template<class T>
     void submit(T &&runnable) {
-        boost::asio::post(pool,std::move(runnable));
+        boost::asio::post(pool,std::forward<T>(runnable));
     }
+
+    template<class FUNC, class RTN>
+    std::future<RTN> getFuture(FUNC &&function) {
+        return boost::asio::post(pool, boost::asio::use_future(std::forward<FUNC>(function)));
+    }
+
 };
 
 extern ThreadPool executor;

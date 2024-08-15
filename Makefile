@@ -1,43 +1,47 @@
-# Directory where the .cpp files are
-CPP_DIR = ./src
+# Directory where the .cpp files are to be found
+CPP_DIR = src
 
-#libraries to include (use -l<libraryname>)
-LIBS = -pthread #-lnlopt -lm
+# Directory where .o files should be put
+OBJ_DIR = obj
+
+# libraries to include (use -l<libraryname>) #-lnlopt -lm
+LIBS = -pthread
 
 # name of the executable file to generate
 EXECUTABLE = a.out
 
 # directories to search when resolving #includes
-INCLUDE_DIRS = ./include
+INC_DIRS = include
 
-# Optimisation flag 
-# OPTFLAG = -fexternal-templates
+# Optimisation flag  # OPTFLAG = -fexternal-templates
 OPTFLAG = -O3
 
 # Language standard to use
 STD = c++20
 
-# compiler to use
-COMPILER = g++
+# compiler executable
+COMPILER = /usr/bin/g++
 
 # all the cpp files recursively below CPP_DIR
 CPP_FILES = $(wildcard $(CPP_DIR)/*.cpp) $(wildcard $(CPP_DIR)/**/*.cpp)
 
 # all object files to generate
-OBJ_FILES = $(CPP_FILES:.cpp=.o)
+OBJ_FILES =	$(patsubst $(CPP_DIR)/%, $(OBJ_DIR)/%, $(CPP_FILES:.cpp=.o))
 
+# rules for compilation
 all: $(OBJ_FILES)
 	$(COMPILER) $(OBJ_FILES)  $(LIBS) -o $(EXECUTABLE)
 
 clean:
-	find $(CPP_DIR) -type f -name '*.o' -print -delete
+	find $(OBJ_DIR) -type f -name '*.o' -print -delete
 
 check:
 	$(info CPP_FILES = $(CPP_FILES))
 	$(info OBJ_FILES = $(OBJ_FILES))
-	$(info compile command = $(COMPILER) $(OPTFLAG) -std=$(STD) -I$(INCLUDE_DIRS) -c -o file.o file.cpp)
+	$(info compile command = $(COMPILER) $(OPTFLAG) -std=$(STD) -I$(INC_DIRS) -c -o $(OBJ_DIR)/file.o $(SRC_DIR)/file.cpp)
 	$(info link command    = $(COMPILER) $(OBJ_FILES) $(LIBS) -o $(EXECUTABLE))
 
 # rule to compile .cpp files to .o files
-%.o: %.cpp
-	$(COMPILER) $(OPTFLAG) -std=$(STD) -I$(INCLUDE_DIRS) -c -o $@ $<
+$(OBJ_DIR)/%.o: $(CPP_DIR)/%.cpp
+	mkdir -p $(dir $@)
+	$(COMPILER) $(OPTFLAG) -std=$(STD) -I$(INC_DIRS) -c -o $@ $<

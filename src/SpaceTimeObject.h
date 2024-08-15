@@ -7,23 +7,27 @@
 #include "Channel.h"
 #include "spacetime/ReferenceFrame.h"
 #include "ThreadPool.h"
-#include "ChannelRef.h"
+#include "OutChannel.h"
+#include "InChannel.h"
 
 template<ReferenceFrame FRAME>
 class SpaceTimeBase {
 
 public:
-    FRAME               frameOfReference;
     FRAME::SpaceTime    position;
+    FRAME               frameOfReference;
     std::queue<std::function<void()>>   callOnMove;
 
-    SpaceTimeBase(FRAME frame) : frameOfReference(std::move(frame)) {}
+    template<class P, class F>
+    SpaceTimeBase(P &&position, F &&frame) : 
+        position(std::forward<P>(position)), 
+        frameOfReference(std::forward<F>(frame)) {}
 
     void callbackOnMove(std::function<void()> callback) {
         callOnMove.push(std::move(callback));
     }
 
-    void execCallbakcs() {
+    void execCallbacks() {
         while(!callOnMove.empty()) {
             executor.submit(callOnMove.front());
             callOnMove.pop();
@@ -36,51 +40,72 @@ public:
 template<class T, ReferenceFrame FRAME>
 class SpaceTimeObject : public SpaceTimeBase<FRAME> {
 protected:
-    std::vector<Channel<T,FRAME>>   inChannels;
+    std::vector<InChannel<T,FRAME>>   inChannels; // TODO: make InChannel object that closes the channel on deletion
 
 public:
     T object;
 
-    SpaceTimeObject(T &&obj, FRAME frame) : SpaceTimeBase<FRAME>(std::move(frame)), object(std::move(obj)) { }
+    template<class P, class F, class... ARGS>
+    SpaceTimeObject(P &&position, F &&frame, ARGS &&... args) : 
+        SpaceTimeBase<FRAME>(std::forward<P>(position), std::forward<F>(frame)),
+        object(std::forward<ARGS>(args)...) { }
 
-    // default T constructor 
-    SpaceTimeObject(FRAME frame) : SpaceTimeBase<FRAME>(std::move(frame)) { }
 
+    void connect(InChannel<T,FRAME> &&inChannel) {
+        inChannel.open(*this);
+        inChannels.push_back(std::move(inChannel));
+    }
 
-    // ChannelRef<T,FRAME> addChannel(const SpaceTimeBase<FRAME> &source) {
-    //     return inChannels.emplace_back(source, *this);
-    // }
-
-    ChannelRef<T,FRAME> newChannel() {
-        return inChannels.emplace_back(*this);
+    void disconnect(InChannel<T,FRAME> &inChannel) {
+        // this should always be the currently active channel from processNextEvent
     }
 
 
     // step to move this object forward until it blocks
     void operator()() {
         bool hasMoved = false;
-        while(processNextEvent()){
+        while(processNextEvent() && this->position.isWithinBounds()){
             hasMoved = true;
         }
         if(hasMoved) this->execCallbakcs();
-        
+        if(!this->position.isWithinBounds()) delete(this);
     }
 
 
 protected:
+
     bool processNextEvent() {
-        typename FRAME::SpaceTime earliestIntersection;
-        Channel<T,FRAME> *earliestChannel = nullptr;
-        for(Channel<T,FRAME> &chan : inChannels) {
-            typename FRAME::SpaceTime intersection = this->frameOfReference.intersect(chan.position(), this->position);
-            if(earliestChannel == nullptr || intersection <= earliestIntersection) {
+        if(inChannels.empty()) return false;
+        auto chan = inChannels.beigin();
+        auto earliestChannel = chan;
+        auto earliestIntersection = this->frameOfReference.intersect(chan->position(), this->position);
+        ++chan;
+        while(chan != inChannels.end()) {
+            auto intersection = this->frameOfReference.intersect(chan->position(), this->position);
+            if(intersection <= earliestIntersection) {
                 earliestIntersection = intersection;
                 earliestChannel = &chan;
             }
+            ++chan;
         }
-        this->position = earliestIntersection;
-        earliestChannel->front()(this);
-        return !earliestChannel.pop();     // returns true if not blocking 
+        this->position = this->frameOfReference.positionAfter(this->position, earliestIntersection);
+        bool foundEvent = !earliestChannel->empty();
+        if(foundEvent) {
+            earliestChannel->front()(SpaceTimePtr(this)); // execute event
+            earliestChannel->pop();
+            if(earliestChannel->empty() && !earliestChannel->isOpen()) {
+                // erase channel
+                if(inChannels.size() == 1) {
+                    inChannels.clear();
+                } else {
+                    *earliestChannel = std::move(inChannels.back()); // TODO: can't move channels as this would invalidate ChannelRefs
+                    inChannels.pop_back();
+                }
+            }
+        } else {
+            earliestChannel->setBlockingCallback();
+        }
+        return foundEvent;
     }
 };
 

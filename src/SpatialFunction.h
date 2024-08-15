@@ -10,14 +10,12 @@ template<class T, ReferenceFrame FRAME>
 class SpatialFunction {
     public:
     FRAME::SpaceTime                            position;   // position on emission
-    std::function<void(SpaceTimePtr<T,FRAME>)>  event;       // returns new velocity of agent
+    std::function<void(SpaceTimePtr<T,FRAME>)>  function;   // call to execute
 
-    SpatialFunction(FRAME::SpaceTime position, std::function<void(SpaceTimePtr<T,FRAME>)> event) : position(std::move(position)), event(std::move(event)) {}
-    SpatialFunction(FRAME::SpaceTime position) : position(std::move(position)) {} // create a blocking entry
+    template<class LAMBDA>
+    SpatialFunction(const FRAME::SpaceTime &position, LAMBDA &&lambda) : position(position), function(std::forward<LAMBDA>(lambda)) {}
 
-    bool hasEvent() { return (bool)event; }
-
-    void operator()(SpaceTimePtr<T,FRAME> &agentPtr) { event(agentPtr); }
+//    void operator()(SpaceTimePtr<T,FRAME> agentPtr) { function(agentPtr); }
 
 };
 
