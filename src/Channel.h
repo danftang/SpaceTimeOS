@@ -13,6 +13,7 @@
 
 template<ReferenceFrame FRAME> class SpaceTimeBase;
 template<class T, ReferenceFrame FRAME> class SpaceTimeObject;
+template<class T, ReferenceFrame FRAME> class SpaceTimePtr;
 
 template<class T, ReferenceFrame FRAME>
 class Channel {
@@ -21,42 +22,67 @@ protected:
     SpaceTimeObject<T,FRAME> *              target = nullptr;
     std::deque<SpatialFunction<T,FRAME>>    buffer;
 
-    friend class InChannel<T,FRAME>;
-    friend class OutChannel<T,FRAME>;
-
-    Channel() = default; // user creates new channels through existing ones and through spawning
 
 public:
+    Channel() = default;
+    Channel(const Channel<T,FRAME> &other) = delete;
+
     typedef typename FRAME::SpaceTime SpaceTime;
 
+    // friend class SpaceTimeObject<T,FRAME>;
+    // friend class SpaceTimePtr<T,FRAME>;
+
     class In{
-    protected:
-        In(Channel<T, FRAME> *channel) : channel(channel) { }
     public:
-        In(InChannel<T, FRAME> &&moveFrom) : channel(moveFrom.channel) {
+        In(Channel<T, FRAME> &channel, SpaceTimeObject<T,FRAME> &target) {
+            if(channel.target == nullptr) {
+                channel.target = &target;
+                this->channel = &channel;
+            } else {
+                this->channel = nullptr;
+            }
+        }
+
+        In(In &&moveFrom) : channel(moveFrom.channel) {
             moveFrom.channel = nullptr;
         }
 
         ~In() {
-            if (channel != nullptr) {
+            if (isConnected()) {
                 channel->target = nullptr;
-                if (channel->source == nullptr) delete (channel);
+                if (!isOpen()) delete (channel);
             }
         }
 
-        void pop() { channel->buffer.pop_front(); }
-        const SpatialFunction<T, FRAME> &front() { return channel->buffer.front(); }
+        // void pop() { channel->buffer.pop_front(); }
+        // const SpatialFunction<T, FRAME> &front() { return channel->buffer.front(); }
+
+        void executeNext(SpaceTimePtr<T,FRAME> obj) {
+            channel->buffer.front()(obj);
+            channel->buffer.pop_front();
+        }
 
         // position of the front of the queue, or source if empty
-        // error if closed and empty
-        FRAME::SpaceTime position() const {
-            return channel->buffer.empty() ? channel->source->position : channel->buffer.front().position;
+        // nullptr if closed and empty
+        const FRAME::SpaceTime *positionPtr() const {
+            typename FRAME::SpaceTime *ppos = nullptr;
+            if(empty()) {
+                if(isOpen()) ppos = &channel->source->position;
+            } else {
+                ppos = &channel->buffer.front().position;
+            }
+            return ppos;
         }
 
         // tell source to callback target on move
         void setBlockingCallback() {
-            channel->source->callbackOnMove(*channel->target);
+            if(isOpen()) channel->source->callbackOnMove(*channel->target);
         }
+
+        bool empty() { return channel->buffer.empty(); }
+
+        bool isConnected() { return channel != nullptr; }
+        bool isOpen() { return isConnected() && channel->source != nullptr; }
 
     protected:
         Channel<T, FRAME> *channel;
@@ -68,24 +94,24 @@ public:
     public:
         Out() : channel(nullptr) {}
 
-        // create a new channel to a given target
-        // Out(Out<T, FRAME> &targetChannel)
-        // {
-        //     channel = new Channel<T, FRAME>();
-        //     // send connection code to target
-        //     targetChannel.send([chan = channel](SpaceTimePtr<T, FRAME> targetObj) {
-        //         targetObj.connect(chan); // TODO: make this a protected method ?
-        //         });
-        // }
-
-        Out(SpaceTimeBase<FRAME> *source, SpaceTimeObject<T, FRAME> *target) {
-            channel = new Channel<T, FRAME>();
-            target->connect(channel);
-            channel->open(source);
+        Out(SpaceTimeBase<FRAME> &source, Channel<T,FRAME> &channel) {
+            if(channel.source == nullptr) {
+                channel.source = &source;
+                this->channel = &channel;
+            } else {
+                this->channel = nullptr; // channel already open
+            }
         }
 
+
+        // Out(SpaceTimeBase<FRAME> *source, SpaceTimeObject<T, FRAME> *target) {
+        //     channel = new Channel<T, FRAME>();
+        //     target->connect(channel);
+        //     channel->open(source);
+        // }
+
         // move a channel from another to this
-        Out(OutChannel<T, FRAME> &&moveFrom) : channel(moveFrom.channel) {
+        Out(Out &&moveFrom) : channel(moveFrom.channel) {
             moveFrom.channel = nullptr;
         }
 
@@ -93,7 +119,7 @@ public:
             close();
         }
 
-        Out<T, FRAME> &operator=(Out<T, FRAME> &&moveFrom) {
+        Out &operator=(Out &&moveFrom) {
             channel = moveFrom.channel;
             moveFrom.channel = nullptr;
             return *this;
@@ -105,29 +131,34 @@ public:
         }
 
         void close() {
-            if (channel != nullptr) {
+            // TODO: Danger if we close this end before the other end has connected, then the other end tried to connect.
+            // need to distinguish between never-connected and closed for each end of the channel.
+            if (isConnected()) {
                 if (channel->target == nullptr) {
                     delete channel;
-                } else if(buffer->empty()) {
-                    // place null task on buffer to ensure the target sees the channel close
-                    send([](SpaceTimePtr<T,FRAME>){});
+                } else {
+                    if(channel->buffer.empty()) {
+                        // place null task on buffer to ensure the target sees the channel close
+                        send([](SpaceTimePtr<T,FRAME>){});
+                    }
+                    channel->source = nullptr;
+                    channel = nullptr;
                 }
-                    
-                }
-                channel->source = nullptr;
-                channel = nullptr;
             }
         }
 
-        // create a new channel connected to the target of this
-        Channel<T,FRAME> *newChannel() {
+        // create a new channel and send a message down this channel connecting to the target of this
+        Channel<T,FRAME> &newChannel() {
             Channel *newChannel = new Channel<T, FRAME>();
             // send connection code to target
             send([chan = newChannel](SpaceTimePtr<T, FRAME> targetObj) {
-                targetObj.connect(chan); // TODO: make this a protected method ?
-                });
-            return newChannel;
+                targetObj.connectIn(*chan);
+            });
+            return *newChannel;
         }
+
+        bool isConnected() { return channel != nullptr; } // ... to a channel
+        bool isOpen() { return isConnected() && channel->target != nullptr; } // ... to a target
 
     protected:
         Channel<T, FRAME> *channel;
@@ -135,18 +166,18 @@ public:
 
 
 
-    template<class SRCTYPE>
-    Out open(SpaceTimePtr<SRCTYPE,FRAME> src) {
-        if(source != nullptr) throw(std::runtime_error("Channel already connected to a source"));
-        source = src.ptr;
-        return Out(this);
-    }
+    // template<class SRCTYPE>
+    // Out open(SpaceTimePtr<SRCTYPE,FRAME> src) {
+    //     if(source != nullptr) throw(std::runtime_error("Channel already connected to a source"));
+    //     source = src.ptr;
+    //     return Out(this);
+    // }
 
-    InChannel<T,FRAME> open(SpaceTimeObject<T,FRAME> *target) {
-        if(this->target != nullptr) throw(std::runtime_error("Channel already connected to a target"));
-        this->target = target;
-        return InChannel<T,FRAME>(this);
-    }
+    // In open(SpaceTimeObject<T,FRAME> *target) {
+    //     if(this->target != nullptr) throw(std::runtime_error("Channel already connected to a target"));
+    //     this->target = target;
+    //     return In(this);
+    // }
 
     // OutChannel<T,FRAME> openOut(SpaceTimeBase<T,FRAME> *);
 

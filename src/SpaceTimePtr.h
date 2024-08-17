@@ -4,7 +4,6 @@
 #include <vector>
 #include "SpaceTimeObject.h"
 
-template<class T, ReferenceFrame FRAME> class OutChannel;
 
 // A smart pointer for use by a spatial funciton, to run on intersection with a spatial object.
 template<class T, ReferenceFrame FRAME>
@@ -21,17 +20,14 @@ protected:
     // create a (closed) channel to the new object
     // The new object will block until the channel is opened.
     template<class NEWTYPE, class... ARGS>
-    Channel<NEWTYPE,FRAME> &doSpawn(ARGS &&...args) {
-        // SpaceTimeObject<NEWTYPE,FRAME> *newObjPtr = ;
-        // OutChannel<NEWTYPE,FRAME> chan(*newObjPtr);
+    Channel<NEWTYPE,FRAME>::Out doSpawn(ARGS &&...args) {
+        auto pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(std::forward<ARGS>(args)...);
         auto pChannel = new Channel<NEWTYPE,FRAME>();
-        auto pObj = new SpaceTimeObject<NEWTYPE,FRAME>(std::forward<ARGS>(args)...);
-        pObj->connect(pChannel);
-        return *pChannel;
+        pTarget->connect(typename Channel<NEWTYPE,FRAME>::In(*pChannel, *pTarget));
+        return {*ptr, *pChannel};
     }    
 
 public:
-//    template<class T2, ReferenceFrame FRAME2> friend class OutChannel; // allow access to pointer to open channel
     friend class SpaceTimeObject<T,FRAME>; // allow access to constructor to send to SpatialFunction
 
     T *operator ->() {
@@ -41,7 +37,7 @@ public:
     // Spawn a new SpaceTimeObject in the same positiopn and reference frame as this object
     // and create a channel to it, connected to this. []
     template<class NEWTYPE, class... ARGS>
-    Channel<NEWTYPE,FRAME> &spawn(ARGS &&...args) {
+    Channel<NEWTYPE,FRAME>::Out spawn(ARGS &&...args) {
         return doSpawn<NEWTYPE>(position(), frame(), std::forward<ARGS>(args)...);
     }
 
@@ -49,7 +45,7 @@ public:
     // If the position is in the non-future, it will be created at the intersection of the new objet's trajectory with 
     // this object's current light-cone.
     template<class NEWTYPE, class POS, class FRM, class... ARGS>
-    Channel<NEWTYPE, FRAME> &spawnAt(POS &&initPosition, FRM &&initFrame, ARGS &&...args) {
+    Channel<NEWTYPE, FRAME>::Out spawnAt(POS &&initPosition, FRM &&initFrame, ARGS &&...args) {
         return position() <= initPosition ? 
             doSpawn<NEWTYPE>(std::forward<POS>(initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...) : 
             doSpawn<NEWTYPE>(initFrame.intersection(position(), initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...);
@@ -63,24 +59,33 @@ public:
         ptr = nullptr;
     }
 
-    // void connect(InChannel<T,FRAME> &&inChan) {
-    //     ptr->connect(std::move(inChan));
+    void connectIn(Channel<T,FRAME> &chan) {
+        ptr->connect(typename Channel<T,FRAME>::In(chan, *ptr));
+    }
+
+    template<class TARGETTYPE>
+    Channel<TARGETTYPE,FRAME>::Out connectOut(Channel<TARGETTYPE,FRAME> &chan) {
+        return {*ptr, chan};
+    }
+
+    // void openIn(Channel<T,FRAME> &chan) {
+    //     // check not already open
+    //     ptr->connect(chan.openIn(ptr));
+    // }
+    
+
+    // // Disconnect the corresponding InChannel
+    // void closeIn(Channel<T,FRAME> &channel) { // this could be in OutChannel
+    //     // check that channel is currently open on this object
     // }
 
-    void openIn(Channel<T,FRAME> &chan) {
-        // check not already open
-        ptr->connect(chan.openIn(ptr));
+    // create a new channel whose target is immediately connected to this
+    Channel<T,FRAME> &newChannel() {
+        Channel<T,FRAME> *pChannel = new Channel<T,FRAME>();
+        pChannel->open(*ptr);
+        ptr->connect(pChannel);
+        return *pChannel;
     }
-    
-    OutChannel<T,FRAME> openOut(Channel<T,FRAME> &chan) {
-
-    }
-
-    // Disconnect the corresponding InChannel
-    void closeIn(Channel<T,FRAME> &channel) { // this could be in OutChannel
-        // check that channel is currently open on this object
-    }
-
     
     FRAME &frame() { return ptr->frameOfReference; }
 

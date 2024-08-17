@@ -5,5 +5,15 @@
             "binaryPath": "/home/daniel/my/deselby-research/SpaceTimeOS/a.out",
             "binaryArgs": []
         }
-    ]
+    ],
+    "files.associations": {
+        "*.ipp": "cpp",
+        "array": "cpp",
+        "*.tcc": "cpp",
+        "deque": "cpp",
+        "list": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "string_view": "cpp"
+    }
 }
