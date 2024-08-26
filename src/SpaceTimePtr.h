@@ -19,17 +19,17 @@ protected:
     // Spawn a new SpaceTimeObject with the given arguments,
     // create a (closed) channel to the new object
     // The new object will block until the channel is opened.
-    template<class NEWTYPE, class... ARGS>
-    Channel<NEWTYPE,FRAME>::Out doSpawn(ARGS &&...args) {
-        auto pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(std::forward<ARGS>(args)...);
-        auto pChannel = new Channel<NEWTYPE,FRAME>();
-        pTarget->connect(typename Channel<NEWTYPE,FRAME>::In(*pChannel, *pTarget));
-        return {*ptr, *pChannel};
-    }    
+    // template<class NEWTYPE, class... ARGS>
+    // Channel<NEWTYPE,FRAME>::Out doSpawn(ARGS &&...args) {
+    //     auto pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(std::forward<ARGS>(args)...);
+    //     auto pChannel = new Channel<NEWTYPE,FRAME>();
+    //     pTarget->connect(typename Channel<NEWTYPE,FRAME>::In(*pChannel, *pTarget));
+    //     return {*ptr, pChannel};
+    // }    
 
 public:
     friend class SpaceTimeObject<T,FRAME>; // allow access to constructor to send to SpatialFunction
-
+    
     T *operator ->() {
         return &ptr->object;
     }
@@ -37,19 +37,27 @@ public:
     // Spawn a new SpaceTimeObject in the same positiopn and reference frame as this object
     // and create a channel to it, connected to this. []
     template<class NEWTYPE, class... ARGS>
-    Channel<NEWTYPE,FRAME>::Out spawn(ARGS &&...args) {
-        return doSpawn<NEWTYPE>(position(), frame(), std::forward<ARGS>(args)...);
+    ChannelWriter<NEWTYPE,FRAME> spawn(ARGS &&...args) {
+         auto *pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(position(), frame(), std::forward<ARGS>(args)...);
+        return ChannelWriter<NEWTYPE,FRAME>{*ptr, *pTarget};
     }
 
     // Spawn in a new position and frame.
     // If the position is in the non-future, it will be created at the intersection of the new objet's trajectory with 
     // this object's current light-cone.
-    template<class NEWTYPE, class POS, class FRM, class... ARGS>
-    Channel<NEWTYPE, FRAME>::Out spawnAt(POS &&initPosition, FRM &&initFrame, ARGS &&...args) {
-        return position() <= initPosition ? 
-            doSpawn<NEWTYPE>(std::forward<POS>(initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...) : 
-            doSpawn<NEWTYPE>(initFrame.intersection(position(), initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...);
-    }
+    // template<class NEWTYPE, class POS, class FRM, class... ARGS>
+    // Channel<NEWTYPE, FRAME>::Out spawnAt(POS &&initPosition, FRM &&initFrame, ARGS &&...args) {
+    //     return position() <= initPosition ? 
+    //         doSpawn<NEWTYPE>(std::forward<POS>(initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...) : 
+    //         doSpawn<NEWTYPE>(initFrame.intersection(position(), initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...);
+    // }
+
+    // create a new channel connected to two ChannelCouriers
+    // Channel<T,FRAME> &spawnChannel() {
+    //     Channel<T,FRAME> *pChannel = new Channel<T,FRAME>();
+    //     ptr->connect(Channel<T,FRAME>::In(*pChannel, *ptr));
+    //     return *pChannel;
+    // }
 
 
 
@@ -59,14 +67,24 @@ public:
         ptr = nullptr;
     }
 
-    void connectIn(Channel<T,FRAME> &chan) {
-        ptr->connect(typename Channel<T,FRAME>::In(chan, *ptr));
+    void attach(ChannelReader<T,FRAME> &&inChannel) {
+        ptr->attach(std::move(inChannel));
     }
 
-    template<class TARGETTYPE>
-    Channel<TARGETTYPE,FRAME>::Out connectOut(Channel<TARGETTYPE,FRAME> &chan) {
-        return {*ptr, chan};
+    template<class TARGETT>
+    void attach(const ChannelWriter<TARGETT,FRAME> &outChannel) {
+        outChannel.attachSource(*ptr);
     }
+
+
+    // void connectIn(Channel<T,FRAME> &chan) {
+    //     ptr->connect(typename Channel<T,FRAME>::In(chan, *ptr));
+    // }
+
+    // template<class TARGETTYPE>
+    // Channel<TARGETTYPE,FRAME>::Out connectOut(Channel<TARGETTYPE,FRAME> *chan) {
+    //     return {*ptr, chan};
+    // }
 
     // void openIn(Channel<T,FRAME> &chan) {
     //     // check not already open
@@ -79,13 +97,6 @@ public:
     //     // check that channel is currently open on this object
     // }
 
-    // create a new channel whose target is immediately connected to this
-    Channel<T,FRAME> &newChannel() {
-        Channel<T,FRAME> *pChannel = new Channel<T,FRAME>();
-        pChannel->open(*ptr);
-        ptr->connect(pChannel);
-        return *pChannel;
-    }
     
     FRAME &frame() { return ptr->frameOfReference; }
 

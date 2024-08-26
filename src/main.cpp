@@ -9,6 +9,7 @@
 #include "spacetime/ReferenceFrame.h"
 #include "SpaceTimePtr.h"
 #include "Laboratory.h"
+#include "Channel.h"
 
 typedef spacetime::IntertialFrame<spacetime::Minkowski<2, 100.0>> MyFrame;
 
@@ -17,13 +18,13 @@ class Pong;
 class Ping {
 public:
     int pingCount = 0;
-    Channel<Pong,MyFrame>::Out other;
+    ChannelWriter<Pong,MyFrame> other;
     void ping();
 };
 
 class Pong {
 public:
-    Channel<Ping,MyFrame>::Out other;
+    ChannelWriter<Ping,MyFrame> other;
     void pong();
 };
 
@@ -46,7 +47,6 @@ void Pong::pong() {
 
 int main() {
 
-
     
     // First decide what spacetime and frame of reference we
     // are using, and create a frame in which the laboratory will exist.
@@ -60,27 +60,29 @@ int main() {
     auto pingOut = laboratory.spawn<Ping>();
     auto pongOut = laboratory.spawn<Pong>();
 
+
     // Connect Ping and Pong together
-    pingOut.send([&pongChan = pongOut.newChannel()](SpaceTimePtr<Ping,MyFrame> pingPtr) {
-        pingPtr->other = pingPtr.connectOut(pongChan);
+    pingOut.send([pongChan = pongOut.unattachedCopy()](SpaceTimePtr<Ping,MyFrame> pingPtr) mutable {
+        pingPtr->other = pongChan.attachSource(pingPtr);
     });
 
-    pongOut.send([&pingChan = pingOut.newChannel()](SpaceTimePtr<Pong,MyFrame> pongPtr) {
-        pongPtr->other = pongPtr.connectOut(pingChan);
+    pongOut.send([pingChan = pingOut.unattachedCopy()](SpaceTimePtr<Pong,MyFrame> pongPtr) mutable {
+        pongPtr->other = pingChan.attachSource(pongPtr);
     });
 
-    // Initiate the ping-pong
-    pingOut.send([](SpaceTimePtr<Ping,MyFrame> objPtr) {
-        objPtr->ping();
-    });
+    // // Initiate the ping-pong
+    // pingOut.send([](SpaceTimePtr<Ping,MyFrame> objPtr) {
+    //     objPtr->ping();
+    // });
 
-    laboratory.simulateFor(50.0);
+    // laboratory.simulateFor(50.0);
 
-    pingOut.send([](SpaceTimePtr<Ping,MyFrame> pingPtr) {
-        pingPtr.kill();
-    });
-    pingOut.close();
-    pongOut.close();
+    // pingOut.send([](SpaceTimePtr<Ping,MyFrame> pingPtr) {
+    //     pingPtr.kill();
+    // });
+
+    // pingOut.close();
+    // pongOut.close();
 
  
     std::cout << "Goodbye world" << std::endl;

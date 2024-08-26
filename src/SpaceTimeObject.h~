@@ -35,13 +35,8 @@ public:
     SPACETIME                           position;
     std::queue<std::function<void()>>   callOnMove;
 
-    SpaceTimeBase(const SpaceTimeBase<SPACETIME> &other) = default;
-
-    SpaceTimeBase(SpaceTimeBase<SPACETIME> &&other) = default;
-
-    SpaceTimeBase(const SPACETIME &position) : position(position) {}
-
-    SpaceTimeBase(SPACETIME &&position) : position(std::move(position)) {}
+    template<class P>
+    SpaceTimeBase(P &&position) : position(std::forward<P>(position)) {}
 
     void callbackOnMove(std::function<void()> callback) {
         callOnMove.push(std::move(callback));
@@ -59,22 +54,21 @@ public:
 template<class T, ReferenceFrame FRAME>
 class SpaceTimeObject : public SpaceTimeBase<typename FRAME::SpaceTime> {
 protected:
-    std::vector<ChannelReader<T,FRAME>>  inChannels;
+    FRAME                                       frameOfReference;
+    std::vector<typename Channel<T,FRAME>::In>  inChannels;
 
 public:
-    T       object;
-    FRAME   frameOfReference;
-
-    typedef FRAME::SpaceTime SpaceTime;
+    T object;
 
     template<class P, class F, class... ARGS>
     SpaceTimeObject(P &&position, F &&frame, ARGS &&... args) : 
-        SpaceTimeBase<SpaceTime>(std::forward<P>(position)),
+        SpaceTimeBase<FRAME>(std::forward<P>(position)),
         frameOfReference(std::forward<F>(frame)),
         object(std::forward<ARGS>(args)...) { }
 
 
-    void attach(ChannelReader<T,FRAME> &&inChan) {
+    void connect(Channel<T,FRAME>::In &&inChan) {
+        assert(inChan.isConnected());
         inChannels.emplace_back(std::move(inChan));
     }
 
@@ -125,7 +119,7 @@ protected:
     }
 
     // intersection of this with a channel
-    FRAME::SpaceTime intersection(const ChannelReader<T,FRAME> &inChan) {
+    FRAME::SpaceTime intersection(const Channel<T,FRAME>::In &inChan) {
         typename FRAME::SpaceTime *pchanpos = inChan.positionPtr();
         return pchanpos == nullptr ? this->position : this->frameOfReference.intersect(*pchanpos, this->position);
     }
