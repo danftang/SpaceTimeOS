@@ -1,3 +1,3 @@
 #include "ThreadPool.h"
 
-ThreadPool executor;
+ThreadPool<0> executor;

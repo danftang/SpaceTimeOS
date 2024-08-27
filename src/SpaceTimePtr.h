@@ -28,18 +28,20 @@ protected:
     // }    
 
 public:
-    friend class SpaceTimeObject<T,FRAME>; // allow access to constructor to send to SpatialFunction
+    friend class SpatialFunction<T,FRAME>; // allow access to constructor to send to SpatialFunction
     
     T *operator ->() {
         return &ptr->object;
     }
 
-    // Spawn a new SpaceTimeObject in the same positiopn and reference frame as this object
+    // Spawn a new SpaceTimeObject in the same position and reference frame as this object
     // and create a channel to it, connected to this. []
     template<class NEWTYPE, class... ARGS>
     ChannelWriter<NEWTYPE,FRAME> spawn(ARGS &&...args) {
-         auto *pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(position(), frame(), std::forward<ARGS>(args)...);
-        return ChannelWriter<NEWTYPE,FRAME>{*ptr, *pTarget};
+        auto *pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(position(), frame(), std::forward<ARGS>(args)...);
+        ChannelWriter<NEWTYPE,FRAME> writer{*ptr, *pTarget};
+        pTarget->step(); // make sure new object is blocking on this
+        return std::move(writer);
     }
 
     // Spawn in a new position and frame.
@@ -72,8 +74,8 @@ public:
     }
 
     template<class TARGETT>
-    void attach(const ChannelWriter<TARGETT,FRAME> &outChannel) {
-        outChannel.attachSource(*ptr);
+    ChannelWriter<TARGETT,FRAME> attach(UnattachedChannelWriter<TARGETT,FRAME> &unattachedChannel) {
+        return unattachedChannel.attachSource(*ptr);
     }
 
 

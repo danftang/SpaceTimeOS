@@ -43,6 +43,9 @@ public:
 
     SpaceTimeBase(SPACETIME &&position) : position(std::move(position)) {}
 
+    ~SpaceTimeBase() { execCallbacks(); } // make sure all writeChannels are unblocked
+    
+
     void callbackOnMove(std::function<void()> callback) {
         callOnMove.push(std::move(callback));
     }
@@ -62,10 +65,14 @@ protected:
     std::vector<ChannelReader<T,FRAME>>  inChannels;
 
 public:
+    typedef FRAME::SpaceTime SpaceTime;
+    typedef FRAME::Time Time;
+
     T       object;
     FRAME   frameOfReference;
 
-    typedef FRAME::SpaceTime SpaceTime;
+    static constexpr Time PROCESSINGTIME = 0.1; // local time between spatial intersection with a call and actually calling it
+
 
     template<class P, class F, class... ARGS>
     SpaceTimeObject(P &&position, F &&frame, ARGS &&... args) : 
@@ -80,12 +87,12 @@ public:
 
 
     // step to move this object forward until it blocks
-    void operator()() {
+    void step() {
         bool hasMoved = false;
         while(processNextEvent() && this->position.isWithinBounds()){
             hasMoved = true;
         }
-        if(hasMoved) this->execCallbakcs();
+        if(hasMoved) this->execCallbacks();
         if(!this->position.isWithinBounds() || inChannels.empty()) {
             // kill this object if it falls off the spacetime or has no chance of executing any more code.
             delete(this); 
@@ -97,37 +104,34 @@ protected:
 
     bool processNextEvent() {
         if(inChannels.empty()) return false;
-        auto chan = inChannels.beigin();
+        // Find earliest channel
+        auto chan = inChannels.begin();
         auto earliestChannel = chan;
-        auto earliestIntersection = intersection(*chan);
+        auto earliestIntersectionTime = intersectionTime(*chan);
         ++chan;
         while(chan != inChannels.end()) {
-            auto intersection = intersection(*chan);
-            if(intersection <= earliestIntersection) {
-                earliestIntersection = intersection;
-                earliestChannel = &chan;
+            auto intersectTime = intersectionTime(*chan);
+            if(intersectTime <= earliestIntersectionTime) {
+                earliestIntersectionTime = intersectTime;
+                earliestChannel = chan;
             }
             ++chan;
         }
-        this->position = this->frameOfReference.positionAfter(this->position, earliestIntersection);
-        bool foundEvent = !earliestChannel->empty();
-        if(foundEvent) {
-            earliestChannel->executeNext();
-            if(earliestChannel->empty() && !earliestChannel->isOpen()) {
-                // we've just executed the last event on a closed channel, so erase channel
-                if(&*earliestChannel != &inChannels.back()) *earliestChannel = std::move(inChannels.back());
-                inChannels.pop_back();
-            }
-        } else {
-            earliestChannel->setBlockingCallback();
+
+        // Process earliest channel
+        this->position = this->frameOfReference.positionAfter(this->position, earliestIntersectionTime + PROCESSINGTIME);
+        std::cout << "Moving " << this << " to " << this->position << std::endl;
+        bool foundEvent = earliestChannel->executeNext();
+        if(earliestChannel->isClosed()) { // remove closed channel from inChannels
+            if(&*earliestChannel != &inChannels.back()) *earliestChannel = std::move(inChannels.back());
+            inChannels.pop_back();
         }
         return foundEvent;
     }
 
     // intersection of this with a channel
-    FRAME::SpaceTime intersection(const ChannelReader<T,FRAME> &inChan) {
-        typename FRAME::SpaceTime *pchanpos = inChan.positionPtr();
-        return pchanpos == nullptr ? this->position : this->frameOfReference.intersect(*pchanpos, this->position);
+    Time intersectionTime(const ChannelReader<T,FRAME> &inChan) {
+        return std::max(this->frameOfReference.intersection(inChan.position(), this->position),-PROCESSINGTIME);
     }
 };
 

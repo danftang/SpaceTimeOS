@@ -30,7 +30,7 @@ public:
 
 void Ping::ping() {
     ++pingCount;
-    std::cout << pingCount << std::endl;
+    std::cout << "Ping " << pingCount << std::endl;
     if(pingCount < 100) {
         other.send([](SpaceTimePtr<Pong,MyFrame> pOther) {
            pOther->pong();
@@ -39,6 +39,7 @@ void Ping::ping() {
 }
 
 void Pong::pong() {
+    std::cout << "Pong" << std::endl;
     other.send([](SpaceTimePtr<Ping,MyFrame> pOther) {
         pOther->ping();
     });
@@ -46,7 +47,24 @@ void Pong::pong() {
 
 
 int main() {
-
+    std::cout << "Hello world" << std::endl;
+    // TODO: Sort out initiation of callbacks.
+    // Once started, each agent should either be blocking on a single other agent
+    // or be submitted as a task.
+    // On executio of a step, an agent should move forward until it blocks, then
+    // register itself as a callback on the blocking agent.
+    // Initially, the Laboratory object should be the only object that
+    // isn't blocking. So, to start the simulation we move the laboratory forward and call all its callbacks
+    //
+    // A simulation can be:
+    //      - Calculation of the state of a given agent at a given time in its local frame.
+    //      - Calculation of all agents until no more messages are being passed (equilibrium).
+    //      - Calculation until all agents fall off the edge of spacetime.
+    // 
+    // At spawning, the parent agent can always be the blocking agent of the child (since there is always a channel between them).
+    // If a ChannelWriter is deleted and the channel is blocking it should unblock the channel immediately [and not unblock it when the agent next moves].
+    // 
+    //  
     
     // First decide what spacetime and frame of reference we
     // are using, and create a frame in which the laboratory will exist.
@@ -63,19 +81,23 @@ int main() {
 
     // Connect Ping and Pong together
     pingOut.send([pongChan = pongOut.unattachedCopy()](SpaceTimePtr<Ping,MyFrame> pingPtr) mutable {
-        pingPtr->other = pongChan.attachSource(pingPtr);
+        pingPtr->other = pingPtr.attach(pongChan);
     });
 
     pongOut.send([pingChan = pingOut.unattachedCopy()](SpaceTimePtr<Pong,MyFrame> pongPtr) mutable {
-        pongPtr->other = pingChan.attachSource(pongPtr);
+        pongPtr->other = pongPtr.attach(pingChan);
     });
 
-    // // Initiate the ping-pong
-    // pingOut.send([](SpaceTimePtr<Ping,MyFrame> objPtr) {
-    //     objPtr->ping();
-    // });
+    // Initiate the ping-pong
+    pingOut.send([](SpaceTimePtr<Ping,MyFrame> objPtr) {
+        objPtr->ping();
+    });
 
-    // laboratory.simulateFor(50.0);
+    laboratory.simulateFor(50.0);
+
+    executor.start(); // NB: Only need this for non-threaded exec.
+
+//    executor.submit([]() { std::cout << "Hello world" << std::endl; });
 
     // pingOut.send([](SpaceTimePtr<Ping,MyFrame> pingPtr) {
     //     pingPtr.kill();
@@ -83,7 +105,6 @@ int main() {
 
     // pingOut.close();
     // pongOut.close();
-
  
     std::cout << "Goodbye world" << std::endl;
     return 0;
