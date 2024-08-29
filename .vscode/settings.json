@@ -4,6 +4,11 @@
             "cwd": "/home/daniel/my/deselby-research/SpaceTimeOS",
             "binaryPath": "/home/daniel/my/deselby-research/SpaceTimeOS/a.out",
             "binaryArgs": []
+        },
+        {
+            "cwd": "/home/daniel/my/deselby-research/SpaceTimeOS/debug",
+            "binaryPath": "/home/daniel/my/deselby-research/SpaceTimeOS/debug/a.out",
+            "binaryArgs": []
         }
     ],
     "files.associations": {

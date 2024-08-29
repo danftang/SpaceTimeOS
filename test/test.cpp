@@ -1,6 +1,7 @@
 #include <iostream>
 #include <queue>
 #include <functional>
+#include <vector>
 
 class MyClass {
 protected:
@@ -9,11 +10,11 @@ public:
         std::cout << "Creating" << std::endl;
     }
 
-    MyClass(const MyClass &move) {
-        std::cout << "Copying" << std::endl;
-    }
+    // MyClass(const MyClass &) {
+    //     std::cout << "Copying" << std::endl;
+    // }
 
-    MyClass(MyClass &&move) {
+    MyClass(MyClass &&) {
         std::cout << "Moving" << std::endl;
     }
 
@@ -23,29 +24,16 @@ public:
 
 };
 
-template<class A, class B>
-class Channel {
-    public:
-
-    class In {
-        
-    };
-
-
-    template<class C>
-    void myFunc(const Channel<C,B> &other) {}
-
-
-};
-
 
 int main() {
 
-    Channel<int,int>    myIntInt;
-    Channel<double,int> myDoubleInt;
-    Channel<double,int>::In myDoubleIntIn;
+    std::vector<MyClass> myV;
 
-    myIntInt.myFunc(myDoubleInt);
+    myV.reserve(8);
+
+    myV.push_back(MyClass());
+    myV.push_back(MyClass());
+    myV.push_back(MyClass());
 
     std::cout << "Hello" << std::endl;
     return 0;

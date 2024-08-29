@@ -16,23 +16,11 @@ protected:
     // data at zero distance.
     explicit SpaceTimePtr(SpaceTimeObject<T,FRAME> *ptr): ptr(ptr) { }
 
-    // Spawn a new SpaceTimeObject with the given arguments,
-    // create a (closed) channel to the new object
-    // The new object will block until the channel is opened.
-    // template<class NEWTYPE, class... ARGS>
-    // Channel<NEWTYPE,FRAME>::Out doSpawn(ARGS &&...args) {
-    //     auto pTarget = new SpaceTimeObject<NEWTYPE,FRAME>(std::forward<ARGS>(args)...);
-    //     auto pChannel = new Channel<NEWTYPE,FRAME>();
-    //     pTarget->connect(typename Channel<NEWTYPE,FRAME>::In(*pChannel, *pTarget));
-    //     return {*ptr, pChannel};
-    // }    
 
 public:
     friend class SpatialFunction<T,FRAME>; // allow access to constructor to send to SpatialFunction
     
-    T *operator ->() {
-        return &ptr->object;
-    }
+    T *operator ->() { return &ptr->object; }
 
     // Spawn a new SpaceTimeObject in the same position and reference frame as this object
     // and create a channel to it, connected to this. []
@@ -54,14 +42,6 @@ public:
     //         doSpawn<NEWTYPE>(initFrame.intersection(position(), initPosition), std::forward<FRM>(initFrame), std::forward<ARGS>(args)...);
     // }
 
-    // create a new channel connected to two ChannelCouriers
-    // Channel<T,FRAME> &spawnChannel() {
-    //     Channel<T,FRAME> *pChannel = new Channel<T,FRAME>();
-    //     ptr->connect(Channel<T,FRAME>::In(*pChannel, *ptr));
-    //     return *pChannel;
-    // }
-
-
 
     // kill the referent
     void kill() {
@@ -70,40 +50,24 @@ public:
     }
 
     void attach(ChannelReader<T,FRAME> &&inChannel) {
+//        std::cout << "Attaching ChannelReader to " << ptr << std::endl;
         ptr->attach(std::move(inChannel));
     }
 
     template<class TARGETT>
-    ChannelWriter<TARGETT,FRAME> attach(UnattachedChannelWriter<TARGETT,FRAME> &unattachedChannel) {
-        return unattachedChannel.attachSource(*ptr);
+    ChannelWriter<TARGETT,FRAME> attach(UnattachedChannelWriter<TARGETT,FRAME> &&unattachedChannel) {
+//        std::cout << "Attaching ChannelWriter to " << ptr << std::endl;
+        return std::move(unattachedChannel).attachSource(*ptr);
     }
-
-
-    // void connectIn(Channel<T,FRAME> &chan) {
-    //     ptr->connect(typename Channel<T,FRAME>::In(chan, *ptr));
-    // }
-
-    // template<class TARGETTYPE>
-    // Channel<TARGETTYPE,FRAME>::Out connectOut(Channel<TARGETTYPE,FRAME> *chan) {
-    //     return {*ptr, chan};
-    // }
-
-    // void openIn(Channel<T,FRAME> &chan) {
-    //     // check not already open
-    //     ptr->connect(chan.openIn(ptr));
-    // }
-    
-
-    // // Disconnect the corresponding InChannel
-    // void closeIn(Channel<T,FRAME> &channel) { // this could be in OutChannel
-    //     // check that channel is currently open on this object
-    // }
-
     
     FRAME &frame() { return ptr->frameOfReference; }
 
     const FRAME::SpaceTime &position() const { return ptr->position; }
 
+    friend std::ostream &operator <<(std::ostream &out, const SpaceTimePtr<T,FRAME> &obj) {
+        out << obj.ptr;
+        return out;
+    }
 };
 
 #endif

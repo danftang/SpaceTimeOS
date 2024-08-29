@@ -44,7 +44,7 @@ public:
         while(!tasks.empty()) {
             tasks.front()();
             tasks.pop();
-            std::cout << tasks.size() << " tasks" << std::endl;
+            std::cout << tasks.size() << " tasks left" << std::endl;
         }
         std::cout << "Done" << std::endl;
     }

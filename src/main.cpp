@@ -20,6 +20,7 @@ public:
     int pingCount = 0;
     ChannelWriter<Pong,MyFrame> other;
     void ping();
+    void test() { std::cout << "Executing test" << std::endl; }
 };
 
 class Pong {
@@ -78,22 +79,39 @@ int main() {
     auto pingOut = laboratory.spawn<Ping>();
     auto pongOut = laboratory.spawn<Pong>();
 
+    std::cout << "------" << std::endl;
+    std::cout << laboratory << " = Laboratory" << std::endl;
+    std::cout << pingOut << " = Ping"  << std::endl;
+    std::cout << pongOut << " = Pong" << std::endl;
 
     // Connect Ping and Pong together
     pingOut.send([pongChan = pongOut.unattachedCopy()](SpaceTimePtr<Ping,MyFrame> pingPtr) mutable {
-        pingPtr->other = pingPtr.attach(pongChan);
+        std::cout << "*** Connecting ping to pong" << std::endl;
+        pingPtr->other = pingPtr.attach(std::move(pongChan));
     });
 
     pongOut.send([pingChan = pingOut.unattachedCopy()](SpaceTimePtr<Pong,MyFrame> pongPtr) mutable {
-        pongPtr->other = pongPtr.attach(pingChan);
+        std::cout << "*** Connecting pong to ping" << std::endl;
+        pongPtr->other = pongPtr.attach(std::move(pingChan));
+        // pongPtr->other.send([](SpaceTimePtr<Ping,MyFrame> objPtr) {
+        //     std::cout << "*** Executing initial ping" << std::endl;
+        //     objPtr->ping();
+        // });
     });
+
+    // laboratory.simulateFor(1.0);
+
+    // executor.start();
 
     // Initiate the ping-pong
     pingOut.send([](SpaceTimePtr<Ping,MyFrame> objPtr) {
+        std::cout << "*** Executing initial ping" << std::endl;
         objPtr->ping();
     });
 
-    laboratory.simulateFor(50.0);
+
+
+    laboratory.simulateFor(49.0);
 
     executor.start(); // NB: Only need this for non-threaded exec.
 

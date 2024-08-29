@@ -35,24 +35,29 @@ public:
     SPACETIME                           position;
     std::queue<std::function<void()>>   callOnMove;
 
-    SpaceTimeBase(const SpaceTimeBase<SPACETIME> &other) = default;
+    SpaceTimeBase(const SpaceTimeBase<SPACETIME> &other) = delete; // Just don't copy objects
+    SpaceTimeBase(SpaceTimeBase<SPACETIME> &&other) = delete;
 
-    SpaceTimeBase(SpaceTimeBase<SPACETIME> &&other) = default;
+    SpaceTimeBase(const SPACETIME &position) : position(position) {
+//        std::cout << this << " Creating object at " << this->position << std::endl;
+    }
 
-    SpaceTimeBase(const SPACETIME &position) : position(position) {}
-
-    SpaceTimeBase(SPACETIME &&position) : position(std::move(position)) {}
+    SpaceTimeBase(SPACETIME &&position) : position(std::move(position)) {
+//        std::cout << this << " Move-creating object at " << this->position << std::endl;
+    }
 
     ~SpaceTimeBase() { execCallbacks(); } // make sure all writeChannels are unblocked
     
 
     void callbackOnMove(std::function<void()> callback) {
+        std::cout << this << " Adding callback" << std::endl;
         callOnMove.push(std::move(callback));
     }
 
     void execCallbacks() {
+        std::cout << this << " executing callbacks " << std::endl;
         while(!callOnMove.empty()) {
-            executor.submit(callOnMove.front());
+            executor.submit(std::move(callOnMove.front()));
             callOnMove.pop();
         }
     }
@@ -78,56 +83,80 @@ public:
     SpaceTimeObject(P &&position, F &&frame, ARGS &&... args) : 
         SpaceTimeBase<SpaceTime>(std::forward<P>(position)),
         frameOfReference(std::forward<F>(frame)),
-        object(std::forward<ARGS>(args)...) { }
+        object(std::forward<ARGS>(args)...) { 
+        }
 
 
     void attach(ChannelReader<T,FRAME> &&inChan) {
-        inChannels.emplace_back(std::move(inChan));
+        // TODO: Make inChannels a containter that never copies.
+        inChannels.push_back(std::move(inChan));
     }
 
 
     // step to move this object forward until it blocks
     void step() {
+        std::cout << this << " starting step" << std::endl;
         bool hasMoved = false;
-        while(processNextEvent() && this->position.isWithinBounds()){
-            hasMoved = true;
+        while(processNextEvent()) { hasMoved = true; }
+        if(hasMoved) {
+//            std::cout << this << " submitting " << this->callOnMove.size() << " callbacks " << std::endl;
+            this->execCallbacks();
+        } else {
+//            std::cout << this << " exiting step without moving" << std::endl;
         }
-        if(hasMoved) this->execCallbacks();
-        if(!this->position.isWithinBounds() || inChannels.empty()) {
-            // kill this object if it falls off the spacetime or has no chance of executing any more code.
-            delete(this); 
-        }
+
+        // while(processNextEvent() && this->position.isWithinBounds()){
+        //     hasMoved = true;
+        // }
+        // if(hasMoved) {
+        //     std::cout << this << " submitting " << this->callOnMove.size() << " callbacks " << std::endl;
+        //     this->execCallbacks();
+        // } else {
+        //     std::cout << this << " exiting step without moving" << std::endl;
+        // }
+        // if(!this->position.isWithinBounds() || inChannels.empty()) {
+        //     // kill this object if it falls off the spacetime or has no chance of executing any more code.
+        //     std::cout << "Deleting object " << this << std::endl;
+        //     delete(this);
+        // }
+
+
     }
 
 
 protected:
 
     bool processNextEvent() {
-        if(inChannels.empty()) return false;
+        assert(!inChannels.empty()); // object should have been deleted if no inChannels
         // Find earliest channel
-        auto chan = inChannels.begin();
-        auto earliestChannel = chan;
-        auto earliestIntersectionTime = intersectionTime(*chan);
-        ++chan;
-        while(chan != inChannels.end()) {
-            auto intersectTime = intersectionTime(*chan);
+//        std::cout << this << " finding nearest channel" << std::endl;
+        int idx = 0;
+        int earliestChannelIdx = 0;
+        auto earliestIntersectionTime = intersectionTime(inChannels[idx]);
+        ++idx;
+        while(idx != inChannels.size()) {
+            auto intersectTime = intersectionTime(inChannels[idx]);
             if(intersectTime <= earliestIntersectionTime) {
                 earliestIntersectionTime = intersectTime;
-                earliestChannel = chan;
+                earliestChannelIdx = idx;
             }
-            ++chan;
+            ++idx;
         }
+//        std::cout << "Chose channel " << earliestChannelIdx << std::endl;
 
         // Process earliest channel
         this->position = this->frameOfReference.positionAfter(this->position, earliestIntersectionTime + PROCESSINGTIME);
-        std::cout << "Moving " << this << " to " << this->position << std::endl;
-        bool foundEvent = earliestChannel->executeNext();
-        if(earliestChannel->isClosed()) { // remove closed channel from inChannels
-            if(&*earliestChannel != &inChannels.back()) *earliestChannel = std::move(inChannels.back());
+        std::cout << this << " Moving to " << this->position << std::endl;
+        bool notBlocking = inChannels[earliestChannelIdx].executeNext();
+//        std::cout << (foundEvent?"Executed event":"No event found") << std::endl;
+        if(inChannels[earliestChannelIdx].isClosed()) { // remove closed channel from inChannels
+//            std::cout << "Removing closed channel" << std::endl;
+            if(earliestChannelIdx != inChannels.size()-1) inChannels[earliestChannelIdx] = std::move(inChannels.back());
             inChannels.pop_back();
         }
-        return foundEvent;
+        return notBlocking;
     }
+
 
     // intersection of this with a channel
     Time intersectionTime(const ChannelReader<T,FRAME> &inChan) {
