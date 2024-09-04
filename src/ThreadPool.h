@@ -26,6 +26,10 @@ public:
     std::future<RTN> getFuture(FUNC &&function) {
         return boost::asio::post(pool, boost::asio::use_future(std::forward<FUNC>(function)));
     }
+
+    void join() {
+        pool.join();
+    }
 };
 
 template<>
@@ -39,17 +43,16 @@ public:
         tasks.push(std::forward<T>(runnable));
     }
 
-    void start() {
-        std::cout << "Starting exec with " << tasks.size() << " tasks" << std::endl;
+    void join() {
+//        std::cout << "Starting exec with " << tasks.size() << " tasks" << std::endl;
         while(!tasks.empty()) {
             tasks.front()();
             tasks.pop();
-            std::cout << tasks.size() << " tasks left" << std::endl;
         }
-        std::cout << "Done" << std::endl;
+//        std::cout << "Done" << std::endl;
     }
 };
 
-extern ThreadPool<0> executor;
+// extern ThreadPool<0> executor;
 
 #endif

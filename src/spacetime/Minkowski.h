@@ -1,3 +1,6 @@
+#ifndef MINKOWSKI_H
+#define MINKOWSKI_H
+
 #include <valarray>
 #include <array>
 #include <limits>
@@ -6,69 +9,82 @@
 namespace spacetime {
 
 
-    template<int DIMENSIONS, double MAX_TIME>
-    class Minkowski {
+    template<uint DIMENSIONS, class SCALAR = double>
+    class Minkowski : public std::array<SCALAR,DIMENSIONS> {
     public:
+        typedef SCALAR ScalarType;
 
-        std::array<double,DIMENSIONS> v;
-
-        // default to the origin of the laboratory
+        // Default gives the reference origin 
         Minkowski() {
-            for(int i=0; i<DIMENSIONS; ++i) v[i] = 0.0;
+            for(int i=0; i<DIMENSIONS; ++i) (*this)[i] = 0;
+        }
+
+        // Constructing with a time gives the laboratory origin at a given time
+        // Constructing with 1 gives the laboratory 4-velocity
+        Minkowski(SCALAR laboratoryTime) {
+            (*this)[0] = laboratoryTime;
+            for(int i=1; i<DIMENSIONS; ++i) (*this)[i] = 0;
+        }
+
+        Minkowski(const std::initializer_list<SCALAR> &init) {
+            int i=0;
+            for(const SCALAR &item : init) (*this)[i++] = item;
         }
 
 
-        bool operator <(const Minkowski<DIMENSIONS,MAX_TIME> &other) {
-            double sum = 0.0;
+        bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
+            SCALAR sum = 0;
             for(int d=1; d<DIMENSIONS; ++d) {
-                double delta =  other.v[d] - v[d];
+                SCALAR delta =  other[d] - (*this)[d];
                 sum += delta*delta;
             }
-            double deltat = other.v[0] - v[0];
+            SCALAR deltat = other[0] - (*this)[0];
             return deltat >=0 && sum < deltat*deltat; 
         }
 
-        Minkowski<DIMENSIONS,MAX_TIME> operator -(const Minkowski<DIMENSIONS,MAX_TIME> &other) const {
-            Minkowski<DIMENSIONS,MAX_TIME> result;
-            for(int i=0; i<DIMENSIONS; ++i) result.v[i] = v[i] - other.v[i];
+        Minkowski<DIMENSIONS,SCALAR> operator -(const Minkowski<DIMENSIONS,SCALAR> &other) const {
+            Minkowski<DIMENSIONS,SCALAR> result;
+            for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] - other[i];
             return result;
         }
 
 
-        Minkowski<DIMENSIONS,MAX_TIME> operator +(const Minkowski<DIMENSIONS,MAX_TIME> &other) const {
-            Minkowski<DIMENSIONS,MAX_TIME> result;
-            for(int i=0; i<DIMENSIONS; ++i) result.v[i] = v[i] + other.v[i];
+        Minkowski<DIMENSIONS,SCALAR> operator +(const Minkowski<DIMENSIONS,SCALAR> &other) const {
+            Minkowski<DIMENSIONS,SCALAR> result;
+            for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] + other[i];
             return result;
         }
 
 
-        Minkowski<DIMENSIONS,MAX_TIME> operator *(double time) const {
-            Minkowski<DIMENSIONS,MAX_TIME> result;
-            for(int i=0; i<DIMENSIONS; ++i) result.v[i] = v[i]*time;
+        // If this is a 4-velocity, then this returns the displacement of a clock moving at this velocity
+        // after it experiences properTime
+        Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime) const {
+            Minkowski<DIMENSIONS,SCALAR> result;
+            for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i]*properTime;
             return result;
         }
 
-        // t = B/A iff |tA - B| = 0
-        // for which there are always two real solutions if the frame is moving slower than light-speed
-        // the earlier solution is the past light cone so we ignore this and return the solution on the future light cone.
-        // If this is in the agent's past, it must already be in the future light-cone.
-        // double operator /(const Minkowski<DIMENSIONS,MAX_TIME> &velocity) const {
-        //     return *this / velocity;
-        // }
 
-        bool isWithinBounds() {
-            return v[0] < MAX_TIME;
+        Minkowski<DIMENSIONS,SCALAR> &operator +=(const Minkowski<DIMENSIONS,SCALAR> &other) {
+            for(int i=0; i<DIMENSIONS; ++i) (*this)[i] += other[i];
+            return *this;
         }
 
 
-        static constexpr Minkowski<DIMENSIONS, MAX_TIME> top() {
-            Minkowski<DIMENSIONS,MAX_TIME> t;
-            t.v[0] = std::numeric_limits<double>::infinity();
+        static const Minkowski<DIMENSIONS,SCALAR> top() {
+            Minkowski<DIMENSIONS,SCALAR> t;
+            t[0] = std::numeric_limits<SCALAR>::infinity();
             return t;
         } 
 
-        static inline const Minkowski<DIMENSIONS,MAX_TIME> TOP = top();
+        static inline const Minkowski<DIMENSIONS,SCALAR> TOP = top();
 
+        friend std::ostream &operator <<(std::ostream &out, const spacetime::Minkowski<DIMENSIONS,SCALAR> &pos) {
+            out << "(";
+            for(int i=0; i<DIMENSIONS; ++i) out << pos[i] << " ";
+            out << ")";
+            return out;
+        }
     };
 
     // t = B/A iff |tA - B| = 0
@@ -89,16 +105,11 @@ namespace spacetime {
     // which is true if
     // tA0 - B0 = tA1 - B1
     // so t = (B0 - B1)/(A0 - A1);
-    template<double MAX_TIME>
-    double operator /(const Minkowski<2,MAX_TIME> &position, const Minkowski<2,MAX_TIME> &velocity) {
-        return (position.v[0] - position.v[1])/(velocity.v[0] - velocity.v[1]);
+    template<class SCALAR>
+    double operator /(const Minkowski<2,SCALAR> &displacement, const Minkowski<2,SCALAR> &velocity) {
+        return (displacement[0] - displacement[1])/(velocity[0] - velocity[1]);
     }
 }
 
-template<int DIMENSIONS, double MAX_TIME>
-inline std::ostream &operator <<(std::ostream &out, const spacetime::Minkowski<DIMENSIONS,MAX_TIME> &pos) {
-    out << "(";
-    for(int i=0; i<DIMENSIONS; ++i) out << pos.v[i] << " ";
-    out << ")";
-    return out;
-} 
+
+#endif

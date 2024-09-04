@@ -2,28 +2,25 @@
 #define SPATIALFUNCTION_H
 
 #include <functional>
-#include "spacetime/ReferenceFrame.h"
+#include "Simulation.h"
 
 
-template<class T, ReferenceFrame FRAME> class SpaceTimePtr;
-template<class T, ReferenceFrame FRAME> class SpaceTimeObject;
+template<class T, Simulation SIM> class SpaceTimePtr;
+template<class T, Simulation SIM> class SpaceTimeObject;
 
-template<class T, ReferenceFrame FRAME>
+template<class T, Simulation SIM>
 class SpatialFunction {
 public:
-    typedef FRAME::SpaceTime SpaceTime;
-
+    typedef SIM::SpaceTime SpaceTime;
 
     SpaceTime                                   position;   // position on emission
-    std::function<void(SpaceTimePtr<T,FRAME>)>  function;   // call to execute
+    std::function<void(SpaceTimePtr<T,SIM>)>    function;   // call to execute
     
 
     template<class LAMBDA>
     SpatialFunction(const SpaceTime &position, LAMBDA &&lambda) : position(position), function(std::forward<LAMBDA>(lambda)) {}
 
-    void operator()(SpaceTimeObject<T,FRAME> &agent) { function(SpaceTimePtr<T,FRAME>(&agent)); }
-
-
+    void operator()(SpaceTimeObject<T,SIM> &agent) { function(SpaceTimePtr<T,SIM>(&agent)); }
 };
 
 #endif

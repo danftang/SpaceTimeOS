@@ -3,6 +3,15 @@
 #include <functional>
 #include <vector>
 
+template<class T>
+class MyTClass {
+protected:
+    void myFunc() {}
+public:
+    friend T;  
+};
+
+
 class MyClass {
 protected:
 public:
@@ -22,18 +31,18 @@ public:
         std::cout << "Destructing" << std::endl;
     }
 
+    void myFunc() {
+        MyTClass<MyClass> x;
+        x.myFunc();
+    }
+
 };
 
 
 int main() {
+    MyClass x;
 
-    std::vector<MyClass> myV;
-
-    myV.reserve(8);
-
-    myV.push_back(MyClass());
-    myV.push_back(MyClass());
-    myV.push_back(MyClass());
+    x.myFunc();
 
     std::cout << "Hello" << std::endl;
     return 0;

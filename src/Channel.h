@@ -10,37 +10,40 @@
 #include <deque>
 #include <functional>
 #include <exception>
+#include <mutex>
 
 #include "SpatialFunction.h"
 // #include "SpaceTimeObject.h"
 #include "ThreadPool.h"
-#include "spacetime/ReferenceFrame.h"
+#include "ThreadSafeQueue.h"
+#include "Simulation.h"
 
 template<SpaceTime SPACETIME> class SpaceTimeBase;
-template<class T, ReferenceFrame FRAME> class SpaceTimeObject;
-template<class T, ReferenceFrame FRAME> class SpaceTimePtr;
+template<class T, Simulation SIM> class SpaceTimeObject;
+template<class T, Simulation SIM> class SpaceTimePtr;
 
-template<class T, ReferenceFrame FRAME>
+template<class T, Simulation SIM>
 class Channel {
 public:
-    typedef typename FRAME::SpaceTime SpaceTime;
+    typedef typename SIM::SpaceTime SpaceTime;
 
     SpaceTimeBase<SpaceTime> *              source = nullptr; // null if closed (target will block after processing the last item in the buffer)
-    SpaceTimeObject<T,FRAME> *              target = nullptr;
-    std::deque<SpatialFunction<T,FRAME>>    buffer;
+    SpaceTimeObject<T,SIM> *                target = nullptr;
+    ThreadSafeQueue<SpatialFunction<T,SIM>> buffer;
     bool                                    isBlocking = false; // signals that this Channel is in the source's callback (so don't delete this)
 
 
-    Channel(SpaceTimeBase<SpaceTime> &source, SpaceTimeObject<T,FRAME> &target) : source(&source), target(&target) {
+    Channel(SpaceTimeBase<SpaceTime> &source, SpaceTimeObject<T,SIM> &target) : source(&source), target(&target) {
 //        std::cout << "Creating channel at " << this << std::endl;
      }
 
-    Channel(const Channel<T,FRAME> &other) = delete; // just don't copy channels
-    Channel(Channel<T,FRAME> &&) = delete; // just don't copy channels
+    Channel(const Channel<T,SIM> &other) = delete; // just don't copy channels
+    Channel(Channel<T,SIM> &&) = delete; // just don't copy channels
 
-    ~Channel() {
-//        std::cout << "Deleting channel" << std::endl;
-    }
+    template<std::convertible_to<std::function<void(SpaceTimePtr<T,SIM>)>> LAMBDA>
+    void push(const SpaceTime &position, LAMBDA &&lambda) {
+        buffer.emplace(position, std::forward<LAMBDA>(lambda));
+    }   
 
     // executes the next call on the target
     // returns true if not blocking
@@ -55,7 +58,7 @@ public:
         }
         assert(target != nullptr);
         buffer.front()(*target);
-        buffer.pop_front();
+        buffer.pop();
         return true;
     }
 
@@ -63,7 +66,7 @@ public:
     inline bool unblock() {
         isBlocking = false;
         if(target != nullptr) {
-            target->step();
+            SIM::step(*target);
             return false;
         }
         return source == nullptr;
@@ -79,21 +82,21 @@ public:
     }
 };
 
-template<class T, ReferenceFrame FRAME> class ChannelWriter;
-template<class T, ReferenceFrame FRAME> class UnattachedChannelWriter;
+template<class T, Simulation SIM> class ChannelWriter;
+template<class T, Simulation SIM> class UnattachedChannelWriter;
 
-template<class T, ReferenceFrame FRAME>
+template<class T, Simulation SIM>
 class ChannelReader {
 protected:
-    ChannelReader(Channel<T, FRAME> *channel) : channel(channel) { }
+    ChannelReader(Channel<T, SIM> *channel) : channel(channel) { }
 
 public:
-    typedef FRAME::SpaceTime SpaceTime;
-    friend class ChannelWriter<T,FRAME>;
+    typedef SIM::SpaceTime SpaceTime;
+    friend class ChannelWriter<T,SIM>;
 
-    ChannelReader(const ChannelReader<T,FRAME> &) = delete;
+    ChannelReader(const ChannelReader<T,SIM> &) = delete;
 
-    ChannelReader(ChannelReader<T,FRAME> &&moveFrom) : channel(moveFrom.channel) {
+    ChannelReader(ChannelReader<T,SIM> &&moveFrom) : channel(moveFrom.channel) {
         moveFrom.channel = nullptr;
     }
 
@@ -113,7 +116,7 @@ public:
         return channel->executeNext();
     }
 
-    ChannelReader &operator=(ChannelReader<T,FRAME> &&moveFrom) {
+    ChannelReader &operator=(ChannelReader<T,SIM> &&moveFrom) {
         channel = moveFrom.channel;
         moveFrom.channel = nullptr;
         return *this;
@@ -134,47 +137,45 @@ public:
     // more calls on this channel.
     bool isClosed() const { return channel->source == nullptr && empty(); }
 
-    friend std::ostream &operator <<(std::ostream &out, const ChannelReader<T,FRAME> &in) {
+    friend std::ostream &operator <<(std::ostream &out, const ChannelReader<T,SIM> &in) {
         out << in.channel->target;
         return out;
     }
 
 protected:
-    Channel<T, FRAME> *channel;
+    Channel<T, SIM> *channel;
 };
 
 
 
 
-template<class T, ReferenceFrame FRAME>
+template<class T, Simulation SIM>
 class ChannelWriter
 {
 public:
-    typedef FRAME::SpaceTime SpaceTime;
-    friend class UnattachedChannelWriter<T,FRAME>;
+    typedef SIM::SpaceTime SpaceTime;
+    friend class UnattachedChannelWriter<T,SIM>;
 
     ChannelWriter() : channel(nullptr) {}
 
     // open a channel on the source side
-    ChannelWriter(SpaceTimeBase<SpaceTime> &source, const ChannelWriter<T,FRAME> &target) {
-        channel = new Channel<T,FRAME>(source, *target.channel->target);
-        target.send([chan = channel](SpaceTimePtr<T,FRAME> obj) {
-            std::cout << "*** Attaching channel to target " << obj << std::endl;
+    ChannelWriter(SpaceTimeBase<SpaceTime> &source, const ChannelWriter<T,SIM> &target) {
+        channel = new Channel<T,SIM>(source, *target.channel->target);
+        target.send([chan = channel](SpaceTimePtr<T,SIM> obj) {
+//            std::cout << "*** Attaching channel to target " << obj << std::endl;
             obj.attach(ChannelReader(chan));
         });
     }
 
-    ChannelWriter(SpaceTimePtr<T,FRAME> source, const ChannelWriter<T,FRAME> &target) : ChannelWriter(source.ptr, target) { }
-
-    ChannelWriter(SpaceTimeBase<SpaceTime> &source, SpaceTimeObject<T, FRAME> &target) {
-        channel = new Channel<T, FRAME>(source, target);
-        target.attach(ChannelReader<T,FRAME>(channel));
+    ChannelWriter(SpaceTimeBase<SpaceTime> &source, SpaceTimeObject<T, SIM> &target) {
+        channel = new Channel<T, SIM>(source, target);
+        target.attach(ChannelReader<T,SIM>(channel));
     }
 
-    ChannelWriter(const ChannelWriter<T,FRAME> &) = delete;
+    ChannelWriter(const ChannelWriter<T,SIM> &) = delete;
 
     // move a channel from another to this
-    ChannelWriter(ChannelWriter<T,FRAME> &&moveFrom) : channel(moveFrom.channel) {
+    ChannelWriter(ChannelWriter<T,SIM> &&moveFrom) : channel(moveFrom.channel) {
         moveFrom.channel = nullptr;
     }
 
@@ -185,60 +186,56 @@ public:
         }
     }
 
-    ChannelWriter &operator=(ChannelWriter<T,FRAME> &&moveFrom) {
+    ChannelWriter &operator=(ChannelWriter<T,SIM> &&moveFrom) {
         channel = moveFrom.channel;
         moveFrom.channel = nullptr;
         return *this;
     }
 
-    template <class LAMBDA>
-    bool send(LAMBDA &&function) const {
-        if(channel == nullptr) return false;
-        channel->buffer.emplace_back(channel->source->position, std::forward<LAMBDA>(function));
-        return true;
+    template<std::convertible_to<std::function<void(SpaceTimePtr<T,SIM>)>> LAMBDA>
+    void send(LAMBDA &&function) const {
+        assert(channel != nullptr);
+        channel->push(channel->source->position, std::forward<LAMBDA>(function));
     }
 
-    // void attachSource(SpaceTimeBase<SpaceTime> &source) const {
-    //     assert(channel->source == nullptr);
-    //     channel->source = &newSource;
-    // }
 
     const SpaceTime &sourcePosition() const {
+        assert(channel != nullptr);
         return channel->source->position;
     }
 
     // create a new channel whose target is the same as this, by sending a message down this channel.
-    UnattachedChannelWriter<T,FRAME> unattachedCopy() const { return UnattachedChannelWriter<T,FRAME>(*this); }
+    UnattachedChannelWriter<T,SIM> unattachedCopy() const { return UnattachedChannelWriter<T,SIM>(*this); }
 
-    friend std::ostream &operator <<(std::ostream &out, const ChannelWriter<T,FRAME> &chan) {
+    friend std::ostream &operator <<(std::ostream &out, const ChannelWriter<T,SIM> &chan) {
         out << chan.channel->target;
         return out;
     }
 
 
 protected:
-    Channel<T, FRAME> *channel;
+    Channel<T, SIM> *channel;
 };
 
 
 // Represents the write-end of a channel that hasn't yet been connected to an object
 // This provides a dummy object to connect to in the meantime.
-template<class T, ReferenceFrame FRAME>
+template<class T, Simulation SIM>
 class UnattachedChannelWriter {
 public:
-    typedef FRAME::SpaceTime SpaceTime;
+    typedef SIM::SpaceTime SpaceTime;
 
     // create a new channel with a given target and a stub as source
-    UnattachedChannelWriter(const ChannelWriter<T,FRAME> &target) : 
+    UnattachedChannelWriter(const ChannelWriter<T,SIM> &target) : 
         outChannel(*new SpaceTimeBase<SpaceTime>(target.sourcePosition()), target) { 
             std::cout << outChannel.channel->source << " = unattached stub" << std::endl;
         }
 
-    UnattachedChannelWriter(UnattachedChannelWriter<T,FRAME> &&other) : outChannel(std::move(other.outChannel)) {
+    UnattachedChannelWriter(UnattachedChannelWriter<T,SIM> &&other) : outChannel(std::move(other.outChannel)) {
         std::cout << this << " Moving Unattached channel " << std::endl;
     }
 
-    UnattachedChannelWriter(const UnattachedChannelWriter<T,FRAME> &dummy) {
+    UnattachedChannelWriter(const UnattachedChannelWriter<T,SIM> &dummy) {
         throw(std::runtime_error("Don't try to copy construct an UnattachedChannelWriter. Use std::move instead"));
     }
 
@@ -248,7 +245,7 @@ public:
         }
     }
 
-    ChannelWriter<T,FRAME> attachSource(SpaceTimeBase<SpaceTime> &source) && {
+    ChannelWriter<T,SIM> attachSource(SpaceTimeBase<SpaceTime> &source) && {
         std::cout << this << " Attaching to source " << &source << std::endl;
         assert(outChannel.channel != nullptr);
         assert(outChannel.channel->source != nullptr);
@@ -258,7 +255,7 @@ public:
     }
 
 protected:
-    ChannelWriter<T,FRAME> outChannel;
+    ChannelWriter<T,SIM> outChannel;
 };
 
 
