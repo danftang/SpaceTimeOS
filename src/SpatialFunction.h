@@ -2,11 +2,11 @@
 #define SPATIALFUNCTION_H
 
 #include <functional>
-#include "Simulation.h"
+#include "Concepts.h"
 
 
 template<class T, Simulation SIM> class SpaceTimePtr;
-template<class T, Simulation SIM> class SpaceTimeObject;
+template<class T, class SIM> class SpaceTimeObject;
 
 template<class T, Simulation SIM>
 class SpatialFunction {

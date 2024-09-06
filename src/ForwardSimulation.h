@@ -4,21 +4,22 @@
 
 #include "SpaceTimePtr.h"
 #include "ThreadPool.h"
-#include "Simulation.h"
+#include "Concepts.h"
 
 
-// Dummy object for a Laboratory
-class Lab {};
+// // Dummy object for a Laboratory
+// class Lab {};
 
 // A Laboratory is a spatial object in the default reference frame, at the default position
 // However, a laboratory provides initiating methods that do not respect limitations on the
 // maximum velocity of the flow of information.
-template<SpaceTime SPACETIME, class EXECUTOR = ThreadPool<0>>
-class Laboratory {
+template<SpaceTime SPACETIME, Executor EXECUTOR = ThreadPool<0>>
+class ForwardSimulation {
 public:
-    typedef SPACETIME                   SpaceTime;
-    typedef Laboratory<SPACETIME,EXECUTOR>  Simulation;
-
+    typedef SPACETIME                       SpaceTime;
+    typedef ForwardSimulation<SPACETIME,EXECUTOR>  Simulation;
+    template<class T> using PointerType = SpaceTimePtr<T,Simulation>;
+    template<class T> using ObjectType = SpaceTimeObject<T,Simulation>;
 
     static inline SpaceTimeBase<SpaceTime>  callbacks = SpaceTimeBase<SpaceTime>(SpaceTime());
     static inline EXECUTOR                  executor;
@@ -29,14 +30,14 @@ public:
     // ~Laboratory() {
     //     this->kill();
     // }
-protected:
-    template<class T>
-    static void submit(T &&runnable) { executor.submit(std::forward<T>(runnable)); }
+// protected:
+//     template<class T>
+//     static void submit(T &&runnable) { executor.submit(std::forward<T>(runnable)); }
 public:
 
     template<class T>
     static void step(SpaceTimeObject<T,Simulation> &obj) { 
-        if(isInBounds(obj.position)) {
+        if(isInBounds(obj.position())) {
             executor.submit([&obj]() {
                 obj.step();
             });
@@ -68,14 +69,6 @@ public:
         });
         return SpaceTimePtr<NEWTYPE,Simulation>{ pTarget };
     }
-
-
-    // void simulateFor(FRAME::SpaceTime::Scalar seconds) {
-    //     this->ptr->position = this->frame().positionAfter(this->position(), seconds);
-    //     this->ptr->execCallbacks();
-    // }
-
-
 };
 
 #endif

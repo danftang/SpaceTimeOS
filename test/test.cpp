@@ -3,6 +3,12 @@
 #include <functional>
 #include <vector>
 
+// #include "../src/Concepts.h"
+// #include "../src/Minkowski.h"
+// #include "../src/ThreadPool.h"
+// #include "../src/Laboratory.h"
+
+
 template<class T>
 class MyTClass {
 protected:
@@ -36,7 +42,22 @@ public:
         x.myFunc();
     }
 
+    template<class T>
+    static void step(T t) {}
 };
+
+template<class T, class S> concept TestConcept = requires(S self) {
+    { T::step(self) };
+};
+
+// typedef Minkowski<2>                 MySpaceTime;
+// typedef Laboratory<MySpaceTime, ThreadPool<2>>      MySimulation;
+
+
+
+template<class T>  class MyClass2 : requires TestConcept<T,MyClass2<T>> {};
+
+typedef MyClass2<MyClass> test;
 
 
 int main() {

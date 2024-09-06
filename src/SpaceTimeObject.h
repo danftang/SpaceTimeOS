@@ -4,24 +4,24 @@
 #include <vector>
 #include <list>
 #include <deque>
+#include "Concepts.h"
 #include "Channel.h"
 #include "ThreadPool.h"
 #include "ThreadSafeQueue.h"
-#include "Simulation.h"
 
 
 template<SpaceTime SPACETIME>
 class SpaceTimeBase {
 public:
-    SPACETIME                               position;
+    SPACETIME                               pos;
     ThreadSafeQueue<std::function<void()>>  callOnMove;
 
     SpaceTimeBase(const SpaceTimeBase<SPACETIME> &other) = delete; // Just don't copy objects
     SpaceTimeBase(SpaceTimeBase<SPACETIME> &&other) = delete;
 
-    SpaceTimeBase(const SPACETIME &position) : position(position) { }
+    SpaceTimeBase(const SPACETIME &position) : pos(position) { }
 
-    SpaceTimeBase(SPACETIME &&position) : position(std::move(position)) { }
+    SpaceTimeBase(SPACETIME &&position) : pos(std::move(position)) { }
 
     ~SpaceTimeBase() { execCallbacks(); } // make sure all writeChannels are unblocked
     
@@ -39,7 +39,7 @@ public:
 };
 
 
-template<class T, Simulation SIM>
+template<class T, class SIM>
 class SpaceTimeObject : public SpaceTimeBase<typename SIM::SpaceTime> {
 protected:
     std::vector<ChannelReader<T,SIM>>  inChannels;
@@ -47,6 +47,8 @@ protected:
 public:
     typedef SIM::SpaceTime              SpaceTime;
     typedef SIM::SpaceTime::ScalarType  Time;
+    typedef T                           ValueType;
+
 
     SpaceTime   velocity;
     T           object;
@@ -73,13 +75,15 @@ public:
         bool hasMoved = false;
         while(processNextEvent()) { hasMoved = true; }
         if(hasMoved) this->execCallbacks();
+        if(inChannels.empty()) delete(this);
     }
 
+    const SpaceTime &position() { return this->pos; }
 
 protected:
 
     bool processNextEvent() {
-        assert(!inChannels.empty()); // object should have been deleted if no inChannels
+        if(inChannels.empty()) return false;
         // Find earliest channel
         int idx = 0;
         int earliestChannelIdx = 0;
@@ -95,7 +99,7 @@ protected:
         }
 
         // Process earliest channel
-        this->position += this->velocity * (earliestIntersectionTime + PROCESSINGTIME);
+        this->pos += this->velocity * (earliestIntersectionTime + PROCESSINGTIME);
 //        std::cout << this << " Moved to " << this->position << std::endl;
         bool notBlocking = inChannels[earliestChannelIdx].executeNext();
         if(inChannels[earliestChannelIdx].isClosed()) { // remove closed channel from inChannels
@@ -109,7 +113,7 @@ protected:
     // intersection of this with a channel
     Time intersectionTime(const ChannelReader<T,SIM> &inChan) {
         return std::max(
-            (inChan.position() - this->position) / this->velocity
+            (inChan.position() - this->position()) / this->velocity
             ,-PROCESSINGTIME
             );
     }

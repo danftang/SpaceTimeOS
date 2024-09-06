@@ -3,7 +3,6 @@
 
 #include <vector>
 #include "SpaceTimeObject.h"
-#include "Simulation.h"
 
 
 // A smart pointer for use by a spatial funciton, to run on intersection with a spatial object.
@@ -71,7 +70,7 @@ public:
     
     SIM::SpaceTime &velocity() { return ptr->velocity; }
 
-    const SIM::SpaceTime &position() const { return ptr->position; }
+    const SIM::SpaceTime &position() const { return ptr->position(); }
 
     friend std::ostream &operator <<(std::ostream &out, const SpaceTimePtr<T,SIM> &obj) {
         out << obj.ptr;

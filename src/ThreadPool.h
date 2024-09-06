@@ -32,6 +32,8 @@ public:
     }
 };
 
+
+// Zero threads means no threads in the pool, so we execute everything using the thread that calls join()
 template<>
 class ThreadPool<0> {
 protected:
@@ -52,7 +54,5 @@ public:
 //        std::cout << "Done" << std::endl;
     }
 };
-
-// extern ThreadPool<0> executor;
 
 #endif

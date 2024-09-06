@@ -1,17 +1,19 @@
 
 #include <iostream>
 
-#include "spacetime/Minkowski.h"
-#include "Laboratory.h"
+#include "Minkowski.h"
+#include "ForwardSimulation.h"
 #include "Channel.h"
-#include "Simulation.h"
 
 // First decide what spacetime the objects should exist in
-typedef spacetime::Minkowski<2>                 MySpaceTime;
+typedef Minkowski<2>                 MySpaceTime;
 
 // Now create a simulation type that will allow the objects to access the spacetime
 // and to submit tasks
-typedef Laboratory<MySpaceTime, ThreadPool<2>>      MySimulation;
+typedef ForwardSimulation<MySpaceTime, ThreadPool<0>>      MySimulation;
+
+// template<Simulation T> class MyClass {};
+// typedef MyClass<MySimulation> test;
 
 // Now create some objects to exist within the spacetime.
 // These don't need to provide anything special, so can be
@@ -53,8 +55,6 @@ void Pong::pong() {
 
 
 int main() {
-    std::cout << "Hello world" << std::endl;
-
     // To create a new object within a simulation, use spawnAt and provide
     // a location. Any arguments after the location will be sent to the
     // constructor of the created object.
@@ -77,6 +77,5 @@ int main() {
     // in the laboratory (default) reference frame.
     MySimulation::simulateUntil(100);
 
-    std::cout << "Goodbye world" << std::endl;
     return 0;
 }

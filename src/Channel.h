@@ -12,17 +12,16 @@
 #include <exception>
 #include <mutex>
 
+#include "Concepts.h"
 #include "SpatialFunction.h"
-// #include "SpaceTimeObject.h"
 #include "ThreadPool.h"
 #include "ThreadSafeQueue.h"
-#include "Simulation.h"
 
 template<SpaceTime SPACETIME> class SpaceTimeBase;
-template<class T, Simulation SIM> class SpaceTimeObject;
+template<class T, class SIM> class SpaceTimeObject;
 template<class T, Simulation SIM> class SpaceTimePtr;
 
-template<class T, Simulation SIM>
+template<class T, class SIM>
 class Channel {
 public:
     typedef typename SIM::SpaceTime SpaceTime;
@@ -85,7 +84,7 @@ public:
 template<class T, Simulation SIM> class ChannelWriter;
 template<class T, Simulation SIM> class UnattachedChannelWriter;
 
-template<class T, Simulation SIM>
+template<class T, class SIM>
 class ChannelReader {
 protected:
     ChannelReader(Channel<T, SIM> *channel) : channel(channel) { }
@@ -127,7 +126,7 @@ public:
     const SpaceTime &position() const {
         assert(channel != nullptr);
         return (empty() ?
-            (channel->source != nullptr ? channel->source->position : SpaceTime::TOP) 
+            (channel->source != nullptr ? channel->source->pos : SpaceTime::TOP) 
             : channel->buffer.front().position);
     }
 
@@ -195,13 +194,13 @@ public:
     template<std::convertible_to<std::function<void(SpaceTimePtr<T,SIM>)>> LAMBDA>
     void send(LAMBDA &&function) const {
         assert(channel != nullptr);
-        channel->push(channel->source->position, std::forward<LAMBDA>(function));
+        channel->push(channel->source->pos, std::forward<LAMBDA>(function));
     }
 
 
     const SpaceTime &sourcePosition() const {
         assert(channel != nullptr);
-        return channel->source->position;
+        return channel->source->pos;
     }
 
     // create a new channel whose target is the same as this, by sending a message down this channel.
