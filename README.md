@@ -45,9 +45,14 @@ To begin the simulation, we call `simulateUntil(time)` which simulates the agent
     MySimulation::simulateUntil(100);
 ```
 
-## Spacetime as part of a paradigm for computation
+## Spacetime as a paradigm for distributed computation
 
-In the simple example above we used a Minkowski spacetime. This is a natural choice when the agents represent real objects in the world, but users can create their own spacetimes and this allows a lot of flexibility to deal with any type of simulation. We'll now show how spacetime can be used as an integral part of a definition of any multi-agent computation. 
+In the simple example above we used a Minkowski spacetime. This is a natural choice when the agents represent objects in the real world, but users can create their own spacetimes and this allows a lot of flexibility to deal with any type of distributed simulation. We'll now show how spacetime can be used as an integral part of a definition of any multi-agent computation.
 
-At its most abstract, a spacetime is a vector space equipped with a `distance' function which tells us the length of any vector. We can add and subtract any two vectors to give another vector, or we can multiply a vector by a scalar to give another vector. A computation consists of a set of events, where each event is the execution of a lambda function on a given agent at a specific point in spacetime. To be a valid computation these events must have very specific relationships between them.
+We define a spacetime as a vector space equipped with a `distance' function, |V|, which returns a scalar. To qualify as a vector space we should be able to add and subtract any two vectors to get another vector, and multiply a vector by a scalar to get another vector.
 
+A computation begins with a set of *objects* and *lambda functions*. All objects and lambda functions have positions in spacetime. Objects move with given velocities whose speed must be below some global maximum which we call light-speed. Lambda functions travel at light-speed and radiate out in all directions from their point of creation (a bit like the ripples on the surface of a pond after a stone has been thrown in). Each lambda function takes a single argument and has at most one target object.
+
+When a lambda function reaches its target object, it is absorbed by the target and executed at that point in spacetime with the target object as argument to the function. The result of execution is the modification or destruction of the target object, the creation of new objects and/or the emission of new lambda functions. Any new objects / lambda functions are created at the same point in spacetime as the target object. We call this an event.
+
+So, at any point in the computation we have a set of objects and a set of lambda functions, all moving around a shared spacetime.

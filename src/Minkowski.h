@@ -55,10 +55,17 @@ public:
 
     // If this is a 4-velocity, then this returns the displacement of a clock moving at this velocity
     // after it experiences properTime
-    Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime) const {
+    Minkowski<DIMENSIONS,SCALAR> operator *(const SCALAR &properTime) const {
         Minkowski<DIMENSIONS,SCALAR> result;
         for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i]*properTime;
         return result;
+    }
+
+    // inner product A*B = A0B0 - A1B1 - A2B2 ...
+    SCALAR operator *(const Minkowski<DIMENSIONS,SCALAR> &other) const {
+        SCALAR innerProd = (*this)[0]*other[0];
+        for(int i=1; i<DIMENSIONS; ++i) innerProd -= (*this)[i]*other[i];
+        return innerProd;
     }
 
 
@@ -84,19 +91,27 @@ public:
     }
 };
 
+
+template<int DIM, class SCALAR>
+Minkowski<DIM,SCALAR> operator *(const SCALAR &properTime, const Minkowski<DIM,SCALAR> &velocity) {
+    return velocity*properTime;
+}
+
+
 // t = B/A iff |tA - B| = 0
-// where t is a scalar. If A is a unit 4-velocity vector
-// i.e. it is the distance 
-// which is true if
-// (tA0 - B0)^2 - \sum_i=1^D (tAi - Bi)^2 = 0
-// so we have the quadratic
-// t^2(A0^2 - A1^2 - A2^2...) + 2t(A1B1 + A2B2 ... - A0B0) + (B0^2 - B1^2...) = 0
-// template<int DIM, double MAX_TIME>
-// double operator /(const Minkowski<DIM,MAX_TIME> &position, const Minkowski<DIM,MAX_TIME> &velocity) {
-// x = (-b +- sqrt(b^2 - 4ac))/2a
-//     throw(std::runtime_error("Division not implemented yet"));
-//     return std::numeric_limits<double>::signaling_NaN(); // TODO: implement quadratic solve
-// }
+// where t is a scalar.
+// Equivalently
+// (tA - B).(tA - B) = 0
+// So, given that A.B = B.A 
+// A.At^2 - 2A.Bt + B.B = 0
+template<int DIM, class SCALAR>
+SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM,SCALAR> &velocity) {
+    SCALAR a = velocity * velocity;
+    SCALAR mb = 2 * velocity * displacement; // minus b
+    SCALAR c = displacement * displacement;
+
+    return (mb + sqrt(mb*mb - 4*a*c))/(2*a);
+}
 
 // In the 2 dimensional case we have 
 // t = B/A iff |tA - B| = 0
@@ -104,9 +119,10 @@ public:
 // tA0 - B0 = tA1 - B1
 // so t = (B0 - B1)/(A0 - A1);
 template<class SCALAR>
-double operator /(const Minkowski<2,SCALAR> &displacement, const Minkowski<2,SCALAR> &velocity) {
+SCALAR operator /(const Minkowski<2,SCALAR> &displacement, const Minkowski<2,SCALAR> &velocity) {
     return (displacement[0] - displacement[1])/(velocity[0] - velocity[1]);
 }
+
 
 
 #endif
