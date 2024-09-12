@@ -3,7 +3,6 @@
 
 #include <functional>
 
-
 template<class T>
 concept SpaceTime = requires(T position, T::ScalarType distance, std::function<void()> task, int dim) {
     // ScalarType is the type used to measure each dimension
@@ -18,6 +17,11 @@ concept SpaceTime = requires(T position, T::ScalarType distance, std::function<v
     { T::TOP } -> std::convertible_to<T>;
 };
 
+template<class T>
+concept DefinesSpaceTime = requires() {
+    typename T::SpaceTime;
+    requires SpaceTime<typename T::SpaceTime>;
+};
 
 template<class T>
 concept Executor = requires(T executor, std::function<void()> runnable) {
@@ -27,12 +31,9 @@ concept Executor = requires(T executor, std::function<void()> runnable) {
 
 
 template<class T>
-concept Simulation = requires(std::function<void()> task, T::SpaceTime position, T::template ObjectType<int> obj) {
+concept Simulation = requires(std::function<void()> task, T::SpaceTime position) {
     typename T::SpaceTime;
-    typename T::template ObjectType<int>;
-    requires SpaceTime<typename T::SpaceTime>;    
-
-    { T::step(obj) };
+    requires SpaceTime<typename T::SpaceTime>;
 };
 
 #endif

@@ -2,9 +2,10 @@
 #define LABORATORY_H
 
 
-#include "SpaceTimePtr.h"
+// #include "SpaceTimePtr.h"
 #include "ThreadPool.h"
 #include "Concepts.h"
+#include "Agent.h"
 
 
 // // Dummy object for a Laboratory
@@ -18,25 +19,20 @@ class ForwardSimulation {
 public:
     typedef SPACETIME                       SpaceTime;
     typedef ForwardSimulation<SPACETIME,EXECUTOR>  Simulation;
-    template<class T> using PointerType = SpaceTimePtr<T,Simulation>;
-    template<class T> using ObjectType = SpaceTimeObject<T,Simulation>;
 
-    static inline SpaceTimeBase<SpaceTime>  callbacks = SpaceTimeBase<SpaceTime>(SpaceTime());
     static inline EXECUTOR                  executor;
-    static inline std::function<bool(const SpaceTime &)>   isInBounds;
+    static inline std::function<bool(const SpaceTime &)>   isInBounds = []() { return false; };
 
-//    Laboratory(SIM frame = SIM()) : SpaceTimePtr<Lab,SIM>(new SpaceTimeObject<Lab,SIM>(typename SIM::SpaceTime(), frame)) {}
+    // The laboratory provides a reference origin, and its callback queue
+    // is used by Agent to store callbacks of new agents.
+    static inline AgentBase<SpaceTime>      laboratory = AgentBase<SpaceTime>(SpaceTime());
 
-    // ~Laboratory() {
-    //     this->kill();
-    // }
-// protected:
-//     template<class T>
-//     static void submit(T &&runnable) { executor.submit(std::forward<T>(runnable)); }
+    static inline bool deleteOnBoundary = true;
+
 public:
 
     template<class T>
-    static void step(SpaceTimeObject<T,Simulation> &obj) { 
+    static void submit(T &obj) { 
         if(isInBounds(obj.position())) {
             executor.submit([&obj]() {
                 obj.step();
@@ -44,31 +40,34 @@ public:
         }
     }
 
-    static void simulateUntil(SpaceTime::ScalarType endTime) {
+    static void start(SpaceTime::ScalarType endTime) {
         isInBounds = [endTime](const SpaceTime &position) {
             return position[0] < endTime;
         };
-        callbacks.execCallbacks();
+        laboratory.execCallbacks();
         executor.join();
     }
 
-    template<class NEWTYPE, class... ARGS>
-    static SpaceTimePtr<NEWTYPE,Simulation> spawnAt(const SpaceTime &initPosition, ARGS &&...args) {
-        auto *pTarget = new SpaceTimeObject<NEWTYPE,Simulation>(initPosition, SpaceTime(1), std::forward<ARGS>(args)...);
-        callbacks.callbackOnMove([pTarget]() {
-            Simulation::step(*pTarget);
-        });
-        return SpaceTimePtr<NEWTYPE,Simulation>{ pTarget };
+
+    static void stop() {
+        executor.join();
     }
 
-    template<class NEWTYPE, class... ARGS>
-    static SpaceTimePtr<NEWTYPE,Simulation> spawnAt(SpaceTime &&initPosition, ARGS &&...args) {
-        auto *pTarget = new SpaceTimeObject<NEWTYPE,Simulation>(std::move(initPosition), SpaceTime(1), std::forward<ARGS>(args)...);
-        callbacks.callbackOnMove([pTarget]() { 
-            Simulation::step(*pTarget); 
-        });
-        return SpaceTimePtr<NEWTYPE,Simulation>{ pTarget };
+    static void setMaxTime(SpaceTime::ScalarType laboratoryEndTime) {
+        isInBounds = [laboratoryEndTime](const SpaceTime &position) {
+            return position[0] < laboratoryEndTime;
+        };
     }
+
+    template<class T>
+    static void agentFinished(T *agent) {
+        if(deleteOnBoundary) {
+            delete(agent);
+        } else {
+            agent->setCallback(laboratory);
+        }
+    }    
+
 };
 
 #endif

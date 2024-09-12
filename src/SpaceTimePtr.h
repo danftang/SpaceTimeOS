@@ -62,7 +62,7 @@ public:
     }
 
     template<class TARGETT>
-    ChannelWriter<TARGETT,SIM> attach(UnattachedChannelWriter<TARGETT,SIM> &&unattachedChannel) {
+    ChannelWriter<TARGETT,SIM> attach(RemoteReference<TARGETT,SIM> &&unattachedChannel) {
 //        std::cout << "Attaching ChannelWriter to " << ptr << std::endl;
         return std::move(unattachedChannel).attachSource(*ptr);
     }

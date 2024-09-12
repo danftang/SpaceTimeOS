@@ -53,11 +53,29 @@ template<class T, class S> concept TestConcept = requires(S self) {
 // typedef Minkowski<2>                 MySpaceTime;
 // typedef Laboratory<MySpaceTime, ThreadPool<2>>      MySimulation;
 
+class MyDerived;
 
+class MyBase {
+    private:
+    int x;
 
-template<class T>  class MyClass2 : requires TestConcept<T,MyClass2<T>> {};
+public:
+    friend class MyDerived;
+};
 
-typedef MyClass2<MyClass> test;
+class MyDerived : public MyBase {
+public:
+    void myFunc() {
+        x += 1;
+    }
+};
+
+class MyDerivedDerived : public MyDerived {
+    void f() {
+        x += 2;
+    }
+};
+
 
 
 int main() {

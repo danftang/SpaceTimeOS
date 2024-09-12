@@ -4,78 +4,51 @@
 #include "Minkowski.h"
 #include "ForwardSimulation.h"
 #include "Channel.h"
+#include "Agent.h"
 
-// First decide what spacetime the objects should exist in
-typedef Minkowski<2>                 MySpaceTime;
+// First create a simulation type that defines the spacetime and the means of
+// executing events. Here we choose a 2 dimensional Minkowski spacetime
+// and a thread-pool consisting of 2 threads.
+typedef ForwardSimulation<Minkowski<2> , ThreadPool<2>>      MySimulation;
 
-// Now create a simulation type that will allow the objects to access the spacetime
-// and to submit tasks
-typedef ForwardSimulation<MySpaceTime, ThreadPool<0>>      MySimulation;
-
-// template<Simulation T> class MyClass {};
-// typedef MyClass<MySimulation> test;
-
-// Now create some objects to exist within the spacetime.
-// These don't need to provide anything special, so can be
-// any old object.
-class Pong;
-
-class Ping {
+// Now create a class derived from Agent to exist within the simulation.
+// This class just sends a ping to another agent.
+class Ping : public Agent<Ping, MySimulation> {
 public:
-    int pingCount = 0;
-    ChannelWriter<Pong,MySimulation> other;
-    void ping();
-};
+    ChannelWriter<Ping> other;
 
-class Pong {
-public:
-    ChannelWriter<Ping,MySimulation> other;
-    void pong();
-};
+    Ping() : Agent<Ping,MySimulation>(Minkowski<2>(), Minkowski<2>(1)) {}
 
-void Ping::ping() {
-    ++pingCount;
-    std::cout << "Ping " << pingCount << std::endl;
-    if(pingCount < 100) {
-        // other is a channel to the other agent, down which we can send
-        // lambda functions which, on arrival, will be executed by the
-        // remote agent.
-        other.send([](SpaceTimePtr<Pong,MySimulation> pOther) {
-           pOther->pong();
+    ~Ping() { std::cout << "Deleting Ping " << std::endl; }
+
+    void ping() {
+        std::cout << "Ping from " << position() << std::endl;
+        // "other" is a channel to the other agent, down which we can send lambda
+        // functions which, on arrival, will be executed by the remote agent.
+        other.send([](Ping &otherAgent) {
+            otherAgent.ping();
         });
     }
-}
-
-void Pong::pong() {
-    std::cout << "Pong" << std::endl;
-    other.send([](SpaceTimePtr<Ping,MySimulation> pOther) {
-        pOther->ping();
-    });
-}
+};
 
 
 int main() {
-    // To create a new object within a simulation, use spawnAt and provide
-    // a location. Any arguments after the location will be sent to the
-    // constructor of the created object.
-    // This returns a SpatialObjectPtr which is a smart pointer that points
-    // to the new type
-    SpaceTimePtr ping = MySimulation::spawnAt<Ping>(MySpaceTime{{0.0,-1.0}});
-    SpaceTimePtr pong = MySimulation::spawnAt<Pong>(MySpaceTime{{0.0, 1.0}});
+    // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
+    Ping *alice = new Ping();
+    Ping *bob = new Ping();
 
-    // spatial objects communicate via channels. To create a new channel between
-    // two SpatialObjectPtrs use openChannelTo.
-    ping->other = ping.openChannelTo(pong);
-    pong->other = pong.openChannelTo(ping);
+    // now set the agent's member pointers to point to the other agent.
+    alice->other = ChannelWriter(*alice, *bob);
+    bob->other   = ChannelWriter(*bob, *alice);
 
-    // Deferencing a SpatialObjectPtr returns the underlying object.
-    // Here we initialise the ping-pong by calling ping()
-    ping->ping();
+    // Initialise the ping-pong by calling ping()
+    alice->ping();
 
-    // Once the simulation is set up, it can be started using sumulateUntil
-    // which will simulate the objects until they reach the given time
-    // in the laboratory (default) reference frame.
-    MySimulation::simulateUntil(100);
+    // Now start the simulation, here we simply set a max-time in the laboroatory frame
+    MySimulation::start(100);
+
+    // Stopping the simulation ensures that all threads are finished.
+    MySimulation::stop();
 
     return 0;
 }

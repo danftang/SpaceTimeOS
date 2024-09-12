@@ -8,19 +8,19 @@
 template<class T, Simulation SIM> class SpaceTimePtr;
 template<class T, class SIM> class SpaceTimeObject;
 
-template<class T, Simulation SIM>
-class SpatialFunction {
+template<class T>
+class SpatialFunction : public std::function<void(T &)> {
+
 public:
-    typedef SIM::SpaceTime SpaceTime;
-
-    SpaceTime                                   position;   // position on emission
-    std::function<void(SpaceTimePtr<T,SIM>)>    function;   // call to execute
+    typedef T::SpaceTime SpaceTime;
     
-
     template<class LAMBDA>
-    SpatialFunction(const SpaceTime &position, LAMBDA &&lambda) : position(position), function(std::forward<LAMBDA>(lambda)) {}
+    SpatialFunction(const SpaceTime &position, LAMBDA &&lambda) : std::function<void(T &)>(std::forward<LAMBDA>(lambda)), pos(position) {}
 
-    void operator()(SpaceTimeObject<T,SIM> &agent) { function(SpaceTimePtr<T,SIM>(&agent)); }
+    const SpaceTime &position() { return pos; }
+
+protected:
+    SpaceTime                   pos;   // position on emission
 };
 
 #endif

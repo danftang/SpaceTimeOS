@@ -6,44 +6,58 @@ In this paradigm, agents are ordinary C++ objects embued with a position and vel
 
 ## A simple example
 
-To make this more concrete, let's have a look at how we would set up a simulation of two agents that send messages back and forth between eachother.
+To make this more concrete, let's have a look at how we would set up a simple simulation of two agents that send messages back and forth between eachother.
 
 First we define what kind of simulation we want to do. In this case we're doing a simple forward simulation, so we choose `ForwardSimulation`. This type takes two templetes, the first defines what kind of space the agents will inhabit, we choose a Minkowski space-time with three spatial dimensions and a time dimension. This describes the normal physical space we're all familiar with (though more on this later). The second template defines what we want to use to do the computation, here we choose a thread pool with two threads.
 ```
 typedef ForwardSimulation<Minkowski<2>, ThreadPool<2>>      MySimulation;
 ```
 
-Next we define an agent class that sends and receives messages.
+Next we define an agent class that derives from Agent<T,S> where T is the type of the derived class (in the `curiously recurring design pattern') and S defines the simulation type that the agent belongs to.
 ```
-class Agent {
+class Ping : public Agent<Ping, MySimulation> {
 public:
-    ChannelWriter<Agent,MySimulation> other;
+    ChannelWriter<Ping> other;
+
+    Ping() : Agent<Ping,MySimulation>(Minkowski<2>(), Minkowski<2>(1)) {}
 
     void ping() {
-        other.send([](SpaceTimePtr<Ping,MySimulation> pOther) {
-            pOther->ping();
+        other.send([](Ping &otherAgent) {
+            otherAgent.ping();
         });
     }
 };
 ```
-Each agent has an `other` channel, with which it can send a message to the other agent by using the `other.send(message)` method. The agent sends a lambda function that takes a smart pointer to the other agent. When the function reaches the other agent, it will be executed with this pointer pointing to the other agent.
+Each agent has an `other` channel, through which it can communicate with the other agent by using the `other.send(message)` method. The message is a lambda function that takes a reference to the other agent as its argument. When the function reaches the other agent, it will be executed with this agent as its argument.
 
-Now all we need to do is initiate the simulation and set it going. To create the two agents we use `MySimulation::spawnAt(position)` which creates a new object at a given position in space-time and returns a smart pointer to the new object. We then connect them together using the `openChannelTo(remoteAgent)` method of the smart pointer.
-
-Finally, we initiate the communication by calling the `ping()` method on Alice. An underlying object can be accessed by deferencing the smart pointer, but notice that Bob can never directly get a smart pointer to Alice, he can only send lambda functions to Alice, which Alice will then execute with a smart pointer to herself.
-
-To begin the simulation, we call `simulateUntil(time)` which simulates the agents forward until a given time (in the laboratory frame of reference). 
+Now all we need to do is initiate the simulation and set it going.
 ```
-    SpaceTimePtr alice = MySimulation::spawnAt<Agent>({0.0,-1.0});
-    SpaceTimePtr bob   = MySimulation::spawnAt<Agent>({0.0, 1.0});
+    Ping alice;
+    Ping bob;
 
-    alice->other = alice.openChannelTo(bob);
-    bob->other   = bob.openChannelTo(alice);
+    alice.other = makeChannel(alice, bob);
+    bob.other = makeChannel(bob, alice);
 
-    alice->ping();
+    alice.ping();
 
-    MySimulation::simulateUntil(100);
+    MySimulation::setMaxTime(200);
+
+    alice.submit();
+    bob.submit();
+
+    MySimulation::stop();
+
 ```
+Here we create two agents, Alice and Bob, then connect them together using the `makeChannel(source,target)` helper function. This returns a `ChannelWriter` that can be used by `source` to send messages.
+
+Finally, we initiate the communication by calling the `ping()` method on Alice. Notice that Bob can never directly get a smart pointer to Alice, he can only send lambda functions to Alice, which Alice will then execute on herself. This ensures that computation is localised.
+
+We then set the maximum time we want to simulate until (in the laboratory frame of reference) using `MySimulation::setMaxTime(time)`, finally we start the simulation by getting Alice and Bob to submit themselves for computation.
+
+To end the computation we call `MySimulation::stop()`, this ensures that all threads are ended.
+
+## 
+
 
 ## Spacetime as a paradigm for distributed computation
 
