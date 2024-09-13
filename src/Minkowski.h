@@ -9,7 +9,7 @@
 template<uint DIMENSIONS, class SCALAR = double>
 class Minkowski : public std::array<SCALAR,DIMENSIONS> {
 public:
-    typedef SCALAR ScalarType;
+    typedef SCALAR Scalar;
 
     // Default gives the reference origin 
     Minkowski() {

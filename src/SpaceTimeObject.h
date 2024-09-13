@@ -46,7 +46,7 @@ protected:
 
 public:
     typedef SIM::SpaceTime              SpaceTime;
-    typedef SIM::SpaceTime::ScalarType  Time;
+    typedef SIM::SpaceTime::Scalar  Time;
     typedef T                           ValueType;
 
 

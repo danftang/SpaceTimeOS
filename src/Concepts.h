@@ -4,9 +4,9 @@
 #include <functional>
 
 template<class T>
-concept SpaceTime = requires(T position, T::ScalarType distance, std::function<void()> task, int dim) {
-    // ScalarType is the type used to measure each dimension
-    typename T::ScalarType;
+concept SpaceTime = requires(T position, T::Scalar distance, std::function<void()> task, int dim) {
+    // Scalar is the type used to measure each dimension
+    typename T::Scalar;
 
     // A spacetime should be a vector space
     { position + position } -> std::convertible_to<T>;

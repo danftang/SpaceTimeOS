@@ -84,6 +84,7 @@ protected:
 
 public:
     typedef T::SpaceTime SpaceTime;
+    typedef T::SpaceTime::Scalar Scalar;
     friend class ChannelWriter<T>;
 
     ChannelReader(const ChannelReader<T> &) = delete;
@@ -128,6 +129,21 @@ public:
     // A channel is closed for the reader as soon as there can be no
     // more calls on this channel.
     bool isClosed() const { return channel->source == nullptr && empty(); }
+
+    template<class LAMBDA>
+    inline void callbackOnMove(LAMBDA &&lambda) {
+        assert(channel != nullptr);
+        assert(channel->source != nullptr);
+        channel->source->callbackOnMove(std::forward<LAMBDA>(lambda));
+    }
+
+    Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
+        assert(channel != nullptr);
+        return (empty() ?
+            (channel->source != nullptr ? (channel->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Scalar>::infinity())
+            : channel->buffer.front().timeToIntersection(agentPosition,agentVelocity));
+    }
+
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelReader<T> &in) {
         out << in.channel->target;

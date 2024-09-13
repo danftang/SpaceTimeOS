@@ -9,7 +9,7 @@
 // First create a simulation type that defines the spacetime and the means of
 // executing events. Here we choose a 2 dimensional Minkowski spacetime
 // and a thread-pool consisting of 2 threads.
-typedef ForwardSimulation<Minkowski<2> , ThreadPool<2>>      MySimulation;
+typedef ForwardSimulation<Minkowski<2> , ThreadPool<0>>      MySimulation;
 
 // Now create a class derived from Agent to exist within the simulation.
 // This class just sends a ping to another agent.
@@ -17,7 +17,7 @@ class Ping : public Agent<Ping, MySimulation> {
 public:
     ChannelWriter<Ping> other;
 
-    Ping() : Agent<Ping,MySimulation>(Minkowski<2>(), Minkowski<2>(1)) {}
+    Ping() : Agent<Ping,MySimulation>(MySimulation::laboratory) {}
 
     ~Ping() { std::cout << "Deleting Ping " << std::endl; }
 
@@ -37,11 +37,15 @@ int main() {
     Ping *alice = new Ping();
     Ping *bob = new Ping();
 
+    std::cout << "Laboratory is at " << &MySimulation::laboratory << std::endl;
+    std::cout << "Alice is at " << alice << std::endl;
+    std::cout << "Bob is at " << bob << std::endl;
+
     // now set the agent's member pointers to point to the other agent.
     alice->other = ChannelWriter(*alice, *bob);
     bob->other   = ChannelWriter(*bob, *alice);
 
-    // Initialise the ping-pong by calling ping()
+    // Initialize the ping-pong by calling ping()
     alice->ping();
 
     // Now start the simulation, here we simply set a max-time in the laboroatory frame
