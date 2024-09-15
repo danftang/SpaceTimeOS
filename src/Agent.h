@@ -4,6 +4,7 @@
 #include "Concepts.h"
 #include "CallbackQueue.h"
 #include "Channel.h"
+#include "Boundary.h"
 
 template<SpaceTime SPACETIME>
 class AgentBase {
@@ -23,7 +24,7 @@ public:
 
     const SPACETIME &position() const { return pos; }
 
-    template<std::convertible_to<std::function<void()>> LAMBDA>
+    template<std::invocable LAMBDA>
     void callbackOnMove(LAMBDA &&callback) {
         callbacks.push(std::forward<LAMBDA>(callback));
     }
@@ -34,31 +35,37 @@ public:
 
 
 // Base class for all agents
-template<class T, class SIM>
-class Agent : public AgentBase<typename SIM::SpaceTime> {
+template<class T, class ENV>
+class Agent : public AgentBase<typename ENV::SpaceTime> {
 private:
     std::vector<ChannelReader<T>>   inChannels;
 
-    template<class P, class F>
-    Agent(P &&position, F &&velocity) : 
-        AgentBase<SpaceTime>(std::forward<P>(position)),
-        velocity(std::forward<F>(velocity)) { }
 
-    friend SIM;
+    friend ENV;
 
 public:
-    typedef SIM::SpaceTime              SpaceTime;
-    typedef SIM::SpaceTime::Scalar  Scalar;
+    typedef ENV::SpaceTime              SpaceTime;
+    typedef ENV::SpaceTime::Scalar      Scalar;
     typedef T                           DerivedType;
-    typedef SIM                         Simulation;
+    typedef ENV                         Environment;
 
     SpaceTime                       velocity;
 
     static constexpr Scalar PROCESSINGTIME = 1; // local time between spatial intersection with a call and actually calling it
 
 
+    template<class F>
+    Agent(const Boundary<SpaceTime>::Position &positionOnBoundary, F &&velocity) : 
+        AgentBase<SpaceTime>(positionOnBoundary),
+        velocity(std::forward<F>(velocity)) {
+            std::cout << "Creating agent at " << this->position() << std::endl;
+            sendCallbackTo(ENV::boundary);
+        }
+
+    Agent(const Boundary<SpaceTime>::Position &positionOnBoundary) : Agent(positionOnBoundary,SpaceTime(1)) { }
+
     template<class OTHERT>
-    explicit Agent(Agent<OTHERT,SIM> &parent) : Agent(parent.position(), parent.velocity) { 
+    explicit Agent(Agent<OTHERT,ENV> &parent) : AgentBase<SpaceTime>(parent.position()), velocity(parent.velocity) {
         sendCallbackTo(parent);
     }
 
@@ -69,6 +76,7 @@ public:
 
     size_t nChannels() { return inChannels.size(); }
 
+    // invalidates inChannels.back() and inChannels.end()
     void detach(decltype(inChannels)::iterator channelIt) {
         if(&*channelIt != &inChannels.back()) *channelIt = std::move(inChannels.back());
         inChannels.pop_back();
@@ -91,15 +99,25 @@ public:
             sendCallbackTo(*earliestChanIt);
         } else {
             // no inChannels or hit end of simulation
-            SIM::agentFinished(derived()); // submit self to the simulation so that the sim can decide what to do next (e.g. delete, save)
-            return; // just for safety as this may be deleted by now.
+            if(inChannels.empty()) {
+                std::cout << "Out of inCahnnels, deleting " << this << std::endl;
+                delete(&derived()); // no more inChannels
+                return;
+            } else {
+                ENV::boundary.boundaryEvent(derived()); // hit the boundary
+                return; // paranoia
+            }
         }
     }
+
+    void die() { inChannels.clear(); }
 
     template<class DESTINATION>
     void sendCallbackTo(DESTINATION &blockingAgent) {
         blockingAgent.callbackOnMove([&me = derived()]() {
-                SIM::submit(me);
+                ENV::submit([&me]() {
+                    me.step();
+                });
         });
     }
 
@@ -107,33 +125,20 @@ public:
 
 private:
 
-//     // returns true if an event was successfuly processed, false if blocking or empty
-//     bool processNextEvent() {
-//         auto ealiestChannelIt = getEarliestChannel();
-
-//         // Process earliest channel
-//         this->pos += this->velocity * (earliestIntersectionTime + PROCESSINGTIME);
-// //        std::cout << this << " Moved to " << this->position << std::endl;
-//         bool notBlocking = inChannels[earliestChannelIdx].executeNext();
-//         if(inChannels[earliestChannelIdx].isClosed()) { // remove closed channel from inChannels
-//             if(earliestChannelIdx != inChannels.size()-1) inChannels[earliestChannelIdx] = std::move(inChannels.back());
-//             inChannels.pop_back();
-//         }
-//         return notBlocking;
-//     }
-
     // finds the earliest channel and moves this to its intersection point,
     // detaching any closed channels as it goes.
     // If inChannels is empty, moves this to SpaceTime::TOP
     auto moveToEarliestChannel() {
         auto chanIt = inChannels.begin();
+        auto end = inChannels.end();
         auto earliestChanIt = inChannels.end();
-        Scalar earliestIntersectionTime = Simulation::timeToIntersection(this->position(), velocity);
-        while(chanIt != inChannels.end()) {
+        Scalar earliestIntersectionTime = ENV::boundary.timeToIntersection(this->position(), velocity);
+        while(chanIt != end) {
             if(chanIt->isClosed()) {
-                detach(chanIt);
+                --end;
+                if(chanIt != end) *chanIt = std::move(*end);
             } else {
-                auto intersectTime = intersectionTime(*chanIt);
+                auto intersectTime = chanIt->timeToIntersection(this->position(), velocity) + PROCESSINGTIME;
                 if(intersectTime <= earliestIntersectionTime) {
                     earliestIntersectionTime = intersectTime;
                     earliestChanIt = chanIt;
@@ -141,27 +146,24 @@ private:
                 ++chanIt;
             }
         }
-        this->pos += this->velocity * (earliestIntersectionTime + PROCESSINGTIME);
+        this->pos += this->velocity * earliestIntersectionTime;
+        if(earliestChanIt == inChannels.end()) {
+            inChannels.erase(end, inChannels.end());
+            earliestChanIt = inChannels.end(); // new end pointer
+        } else {
+            inChannels.erase(end, inChannels.end());
+        }
         return earliestChanIt;
-    }
-
-
-    // intersection of this with a channel
-    Scalar intersectionTime(const ChannelReader<T> &inChan) {
-        return std::max(
-            inChan.timeToIntersection(this->position(), velocity)
-            ,-PROCESSINGTIME
-            );
     }
 };
 
 
-template<class T, class SIM>
-class AgentWrapper : public Agent<AgentWrapper<T,SIM>,SIM> {
+template<class T, class ENV>
+class AgentWrapper : public Agent<AgentWrapper<T,ENV>,ENV> {
 public:
     template<class P, class V, class... ARGS>
     AgentWrapper(P &&position, V &&velocity, ARGS &&... args) : 
-        Agent<AgentWrapper<T,SIM>,SIM>(std::forward<P>(position), std::forward<V>(velocity)),
+        Agent<AgentWrapper<T,ENV>,ENV>(std::forward<P>(position), std::forward<V>(velocity)),
         object(std::forward<ARGS>(args)...) {};
 
     T object;

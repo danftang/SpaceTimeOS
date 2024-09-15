@@ -6,58 +6,52 @@ In this paradigm, agents are ordinary C++ objects embued with a position and vel
 
 ## A simple example
 
-To make this more concrete, let's have a look at how we would set up a simple simulation of two agents that send messages back and forth between eachother.
+Let's start with a simple simulation of two agents that send messages back and forth between eachother.
 
-First we define what kind of simulation we want to do. In this case we're doing a simple forward simulation, so we choose `ForwardSimulation`. This type takes two templetes, the first defines what kind of space the agents will inhabit, we choose a Minkowski space-time with three spatial dimensions and a time dimension. This describes the normal physical space we're all familiar with (though more on this later). The second template defines what we want to use to do the computation, here we choose a thread pool with two threads.
+First we define what kind of simulation we want to do. In this case we're doing a simple forward simulation, so we choose `ForwardSimulation`. This type takes two templete classes: a spacetime for the agents to inhabit and a resource to do computations on. Here we choose a Minkowski spacetime with three spatial dimensions and a time dimension, this describes the normal physical space we're all familiar with (though more on this later). To do the computation we choose a thread pool with two threads.
 ```
-typedef ForwardSimulation<Minkowski<2>, ThreadPool<2>>      MySimulation;
+typedef ForwardSimulation<Minkowski<4>, ThreadPool<2>>      MySimulation;
 ```
 
 Next we define an agent class that derives from Agent<T,S> where T is the type of the derived class (in the `curiously recurring design pattern') and S defines the simulation type that the agent belongs to.
 ```
 class Ping : public Agent<Ping, MySimulation> {
 public:
-    ChannelWriter<Ping> other;
+    ChannelWriter<Ping> channelToOther;
 
-    Ping() : Agent<Ping,MySimulation>(Minkowski<2>(), Minkowski<2>(1)) {}
+    Ping() : Agent<Ping,MySimulation>(MySimulation::laboratory) {}
 
     void ping() {
-        other.send([](Ping &otherAgent) {
+        std::cout << "Ping from " << position() << std::endl;
+        channelToOther.send([](Ping &otherAgent) {
             otherAgent.ping();
         });
     }
 };
 ```
-Each agent has an `other` channel, through which it can communicate with the other agent by using the `other.send(message)` method. The message is a lambda function that takes a reference to the other agent as its argument. When the function reaches the other agent, it will be executed with this agent as its argument.
+Each agent has an `channelToOther` channel, through which it can communicate with the other agent by using the `send(...)` method. The message is a lambda function that takes a reference to the other agent as its argument. When the function reaches the other agent, it will be executed with that agent as its argument.
 
 Now all we need to do is initiate the simulation and set it going.
 ```
-    Ping alice;
-    Ping bob;
+    Ping *alice = new Ping();
+    Ping *bob = new Ping();
 
-    alice.other = makeChannel(alice, bob);
-    bob.other = makeChannel(bob, alice);
+    alice->channelToOther = ChannelWriter(*alice, *bob);
+    bob->channelToOther   = ChannelWriter(*bob, *alice);
 
-    alice.ping();
+    alice->ping();
 
-    MySimulation::setMaxTime(200);
-
-    alice.submit();
-    bob.submit();
-
-    MySimulation::stop();
-
+    MySimulation::start(100);
 ```
-Here we create two agents, Alice and Bob, then connect them together using the `makeChannel(source,target)` helper function. This returns a `ChannelWriter` that can be used by `source` to send messages.
+Here we create two agents, Alice and Bob and create channels between them using `ChannelWriter(<source>,<target>)`.
 
-Finally, we initiate the communication by calling the `ping()` method on Alice. Notice that Bob can never directly get a smart pointer to Alice, he can only send lambda functions to Alice, which Alice will then execute on herself. This ensures that computation is localised.
+The exchange is initialised by calling the `ping()` method on Alice. Notice that Bob should never directly execute Alice's methods, he should only send lambda functions to Alice, which Alice will then execute on herself. This ensures that computation is localised.
 
-We then set the maximum time we want to simulate until (in the laboratory frame of reference) using `MySimulation::setMaxTime(time)`, finally we start the simulation by getting Alice and Bob to submit themselves for computation.
+The whole simulation is started by calling `MySimulation::start(...)` with the time (in the laboratory frame) that the simulation should end.
 
-To end the computation we call `MySimulation::stop()`, this ensures that all threads are ended.
+## Spawning new agents
 
-## 
-
+An agent can spawn new agents using the new operator. 
 
 ## Spacetime as a paradigm for distributed computation
 

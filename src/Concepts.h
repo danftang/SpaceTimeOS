@@ -29,11 +29,15 @@ concept Executor = requires(T executor, std::function<void()> runnable) {
     { executor.join() }; 
 };
 
+// template<class T>
+// concept AgentEnvironment = requires(T::SpaceTime x, std::function<void()> runnable) {
+//     typename T::SpaceTime;
+//     requires SpaceTime<typename T::SpaceTime>;
 
-template<class T>
-concept Simulation = requires(std::function<void()> task, T::SpaceTime position) {
-    typename T::SpaceTime;
-    requires SpaceTime<typename T::SpaceTime>;
-};
+//     { T::submit(runnable) };
+//     { T::timeToIntersection(x,x) };
+// //    { T::laboratory } -> std::derived_from<AgentBase<typename T::SpaceTime>>;
+// };
+
 
 #endif

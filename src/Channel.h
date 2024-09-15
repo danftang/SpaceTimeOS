@@ -77,6 +77,7 @@ public:
 template<class T> class ChannelWriter;
 template<class T> class RemoteReference;
 
+
 template<class T>
 class ChannelReader {
 protected:
@@ -99,7 +100,7 @@ public:
                 delete(channel);
             } else {
                 channel->buffer.clear(); // delete any captured channels
-                channel->source = nullptr;
+                channel->source = nullptr; // signal reader closure
             }
         }
     }
@@ -130,7 +131,7 @@ public:
     // more calls on this channel.
     bool isClosed() const { return channel->source == nullptr && empty(); }
 
-    template<class LAMBDA>
+    template<std::invocable LAMBDA>
     inline void callbackOnMove(LAMBDA &&lambda) {
         assert(channel != nullptr);
         assert(channel->source != nullptr);
@@ -205,9 +206,13 @@ public:
     }
 
     template<std::convertible_to<std::function<void(T &)>> LAMBDA>
-    void send(LAMBDA &&function) const {
-        assert(channel != nullptr && channel->source != nullptr);
-        channel->push(channel->source->position(), std::forward<LAMBDA>(function));
+    bool send(LAMBDA &&function) const {
+        assert(channel != nullptr);
+        if(channel->source != nullptr) {
+            channel->push(channel->source->position(), std::forward<LAMBDA>(function));
+            return true;
+        }
+        return false;
     }
 
 

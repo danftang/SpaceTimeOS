@@ -55,7 +55,7 @@ public:
 
     // If this is a 4-velocity, then this returns the displacement of a clock moving at this velocity
     // after it experiences properTime
-    Minkowski<DIMENSIONS,SCALAR> operator *(const SCALAR &properTime) const {
+    Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime) const {
         Minkowski<DIMENSIONS,SCALAR> result;
         for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i]*properTime;
         return result;
@@ -92,8 +92,8 @@ public:
 };
 
 
-template<int DIM, class SCALAR>
-Minkowski<DIM,SCALAR> operator *(const SCALAR &properTime, const Minkowski<DIM,SCALAR> &velocity) {
+template<uint DIM, class SCALAR>
+Minkowski<DIM,SCALAR> operator *(SCALAR properTime, const Minkowski<DIM,SCALAR> &velocity) {
     return velocity*properTime;
 }
 
@@ -104,10 +104,10 @@ Minkowski<DIM,SCALAR> operator *(const SCALAR &properTime, const Minkowski<DIM,S
 // (tA - B).(tA - B) = 0
 // So, given that A.B = B.A 
 // A.At^2 - 2A.Bt + B.B = 0
-template<int DIM, class SCALAR>
+template<uint DIM, class SCALAR>
 SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM,SCALAR> &velocity) {
     SCALAR a = velocity * velocity;
-    SCALAR mb = 2 * velocity * displacement; // minus b
+    SCALAR mb = velocity * displacement * 2; // minus b
     SCALAR c = displacement * displacement;
 
     return (mb + sqrt(mb*mb - 4*a*c))/(2*a);
@@ -116,12 +116,19 @@ SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM
 // In the 2 dimensional case we have 
 // t = B/A iff |tA - B| = 0
 // which is true if
+// (tA0 - B0)^2 = (tA1 - B1)^2
+// which is true if
 // tA0 - B0 = tA1 - B1
-// so t = (B0 - B1)/(A0 - A1);
-template<class SCALAR>
-SCALAR operator /(const Minkowski<2,SCALAR> &displacement, const Minkowski<2,SCALAR> &velocity) {
-    return (displacement[0] - displacement[1])/(velocity[0] - velocity[1]);
-}
+// or
+// tA0 - B0 = B1 - tA1
+// so
+// t = (B0 - B1)/(A0 - A1)
+// or
+// t = (B1 - B0)/(A0 + A1)
+// we want the +ve value
+// template<class SCALAR>
+// SCALAR operator /(const Minkowski<2,SCALAR> &displacement, const Minkowski<2,SCALAR> &velocity) {
+// }
 
 
 

@@ -6,6 +6,7 @@
 #include "Channel.h"
 #include "Agent.h"
 
+
 // First create a simulation type that defines the spacetime and the means of
 // executing events. Here we choose a 2 dimensional Minkowski spacetime
 // and a thread-pool consisting of 2 threads.
@@ -15,9 +16,9 @@ typedef ForwardSimulation<Minkowski<2> , ThreadPool<0>>      MySimulation;
 // This class just sends a ping to another agent.
 class Ping : public Agent<Ping, MySimulation> {
 public:
-    ChannelWriter<Ping> other;
+    ChannelWriter<Ping> channelToOther;
 
-    Ping() : Agent<Ping,MySimulation>(MySimulation::laboratory) {}
+    Ping(const MySimulation::BoundaryPos &pos) : Agent<Ping,MySimulation>(pos) {}
 
     ~Ping() { std::cout << "Deleting Ping " << std::endl; }
 
@@ -25,7 +26,7 @@ public:
         std::cout << "Ping from " << position() << std::endl;
         // "other" is a channel to the other agent, down which we can send lambda
         // functions which, on arrival, will be executed by the remote agent.
-        other.send([](Ping &otherAgent) {
+        channelToOther.send([](Ping &otherAgent) {
             otherAgent.ping();
         });
     }
@@ -33,26 +34,21 @@ public:
 
 
 int main() {
-    // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
-    Ping *alice = new Ping();
-    Ping *bob = new Ping();
+    // TODO: should all this be inside the simulation? so that lambdas don't have access to the laboratory?
 
-    std::cout << "Laboratory is at " << &MySimulation::laboratory << std::endl;
-    std::cout << "Alice is at " << alice << std::endl;
-    std::cout << "Bob is at " << bob << std::endl;
+    // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
+    Ping *alice = new Ping(MySimulation::boundary.pointOnBoundary({0,0}));
+    Ping *bob = new Ping(MySimulation::boundary.pointOnBoundary({0,1}));
 
     // now set the agent's member pointers to point to the other agent.
-    alice->other = ChannelWriter(*alice, *bob);
-    bob->other   = ChannelWriter(*bob, *alice);
+    alice->channelToOther = ChannelWriter(*alice, *bob);
+    bob->channelToOther   = ChannelWriter(*bob, *alice);
 
     // Initialize the ping-pong by calling ping()
     alice->ping();
 
-    // Now start the simulation, here we simply set a max-time in the laboroatory frame
+    // Now start the simulation, here we simply set a max-time in the laboroatory frame to end the simulation
     MySimulation::start(100);
-
-    // Stopping the simulation ensures that all threads are finished.
-    MySimulation::stop();
 
     return 0;
 }

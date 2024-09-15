@@ -4,7 +4,6 @@
 #include <functional>
 
 #include "ThreadSafeQueue.h"
-#include "OneShotExecutable.h"
 
 class CallbackQueue {
 protected:
