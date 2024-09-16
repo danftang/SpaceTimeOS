@@ -75,7 +75,7 @@ public:
 };
 
 template<class T> class ChannelWriter;
-template<class T> class RemoteReference;
+template<class T> class SendableWriter;
 
 
 template<class T>
@@ -163,7 +163,7 @@ class ChannelWriter
 {
 public:
     typedef T::SpaceTime SpaceTime;
-    friend class RemoteReference<T>;
+    friend class SendableWriter<T>;
 
     ChannelWriter() : channel(nullptr) {} // a null writer indicates that the reader hasn't been generated yet
 
@@ -222,7 +222,7 @@ public:
     }
 
     // // create a new channel whose target is the same as this, by sending a message down this channel.
-    // RemoteReference<T> unattachedCopy() const { return RemoteReference<T>(*this); }
+    // SendableWriter<T> unattachedCopy() const { return SendableWriter<T>(*this); }
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelWriter<T> &chan) {
         out << chan.channel->target;
@@ -239,25 +239,27 @@ protected:
 // Implemented as a channel that is connected to a dummy source that has position
 // 
 template<class T>
-class RemoteReference {
+class SendableWriter {
 public:
     typedef T::SpaceTime SpaceTime;
 
     // create a new channel with a given target and a stub as source
-    RemoteReference(const ChannelWriter<T> &target) : 
+    SendableWriter(const ChannelWriter<T> &target) : 
         outChannel(*new AgentBase<SpaceTime>(target.sourcePosition()), target) { }
 
-    RemoteReference(AgentBase<SpaceTime> source, T &target) : 
-        outChannel(*new AgentBase<SpaceTime>(source.position()), target) { }
+    SendableWriter(T &target) : 
+        outChannel(*new AgentBase<SpaceTime>(target.position()), target) { } // If we have a raw reference to target it must be in same position
 
-    RemoteReference(RemoteReference<T> &&other) : outChannel(std::move(other.outChannel)) { }
+    SendableWriter(SendableWriter<T> &&other) : outChannel(std::move(other.outChannel)) { }
 
     // Can't delete copy constructor as needed for capture in a std::function until C++23
-    RemoteReference(const RemoteReference<T> &dummy) {
-        throw(std::runtime_error("Don't try to copy construct an RemoteReference. Use std::move instead"));
+    SendableWriter(const SendableWriter<T> &dummy) {
+        // since no data will ever be sent, we can allow shallow copying as long as we 
+        // keep track of reference number..
+        throw(std::runtime_error("Don't try to copy construct an SendableWriter. Use std::move instead"));
     }
 
-    ~RemoteReference() {
+    ~SendableWriter() {
         if(outChannel.channel != nullptr) { // channel is still connected to a stub object
             delete(outChannel.channel->source);
         }
@@ -281,9 +283,9 @@ protected:
 // ChannelWriter<T> makeChannel(AgentBase<typename T::SpaceTime> &source, T &target) { return { source, target }; }
 
 // template<class T>
-// RemoteReference<T> makeChannel(const ChannelWriter<T> &target) { return { target }; }
+// SendableWriter<T> makeChannel(const ChannelWriter<T> &target) { return { target }; }
 
 // template<class T>
-// RemoteReference<T> makeChannel(T &target) { return { target }; }
+// SendableWriter<T> makeChannel(T &target) { return { target }; }
 
 #endif

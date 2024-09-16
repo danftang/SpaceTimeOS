@@ -3,18 +3,19 @@
 
 #include "CallbackQueue.h"
 
+template<class FORWARD>
+class BoundaryCoordinate : public FORWARD { 
+public:
+    explicit BoundaryCoordinate(FORWARD &&position) : FORWARD(position) {}
+};
+
+template<class T> BoundaryCoordinate(std::initializer_list<T>) -> BoundaryCoordinate<std::initializer_list<T>>;
+
 template<class SPACETIME>
 class Boundary {
 public:
     typedef SPACETIME SpaceTime;
     typedef SPACETIME::Scalar Scalar;
-
-    class Position : public SPACETIME {
-    protected:
-        Position(const SPACETIME &pos) : SPACETIME(pos) { }
-        friend Boundary<SPACETIME>;
-    };
-
 
     template<std::invocable LAMBDA>
     inline void callbackOnMove(LAMBDA &&lambda) {
@@ -23,13 +24,6 @@ public:
 
 protected:
     CallbackQueue   callbacks;
-
-    const Position tagAsBoundaryPosition(const SPACETIME &position) {
-        return { position };
-    } 
-
-
-
 };
 
 #endif

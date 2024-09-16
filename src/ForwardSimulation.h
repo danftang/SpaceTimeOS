@@ -16,7 +16,6 @@ public:
     typedef SPACETIME                       SpaceTime;
     typedef SPACETIME::Scalar               Scalar;
     typedef ForwardSimulation<SPACETIME,EXECUTOR>  Simulation;
-    typedef LabTimeBoundary<SpaceTime>::Position    BoundaryPos;
 protected:
 
     static inline EXECUTOR                  executor;

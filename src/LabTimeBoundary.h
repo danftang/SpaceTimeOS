@@ -39,8 +39,21 @@ public:
         }
     }
 
-    const Boundary<SPACETIME>::Position pointOnBoundary(const SpaceTime &pos) {
-        return this->tagAsBoundaryPosition(pos + labVelocity * timeToIntersection(pos,labVelocity));
+    // SpaceTime projectToBoundary(const SpaceTime &pos) {
+    //     return pos + labVelocity * timeToIntersection(pos,labVelocity);
+    // }
+
+
+    template<std::convertible_to<Scalar> T> 
+    SpaceTime onBoundary(std::initializer_list<T> spacePosition) {
+        assert(spacePosition.size() == SpaceTime::size()-1);
+        SpaceTime spaceTimePos;
+        spaceTimePos[0] = maxTime;
+        int i = 1;
+        for(const T &coord : spacePosition) {
+            spaceTimePos[i] = coord;
+        }
+        return spaceTimePos + labVelocity * timeToIntersection(spaceTimePos,labVelocity);
     }
 };
 

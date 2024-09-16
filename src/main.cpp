@@ -18,9 +18,8 @@ class Ping : public Agent<Ping, MySimulation> {
 public:
     ChannelWriter<Ping> channelToOther;
 
-    Ping(const MySimulation::BoundaryPos &pos) : Agent<Ping,MySimulation>(pos) {}
-
-    ~Ping() { std::cout << "Deleting Ping " << std::endl; }
+    template<class P>
+    Ping(P &&position) : Agent<Ping,MySimulation>(std::forward<P>(position)) {}
 
     void ping() {
         std::cout << "Ping from " << position() << std::endl;
@@ -34,11 +33,9 @@ public:
 
 
 int main() {
-    // TODO: should all this be inside the simulation? so that lambdas don't have access to the laboratory?
-
     // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
-    Ping *alice = new Ping(MySimulation::boundary.pointOnBoundary({0,0}));
-    Ping *bob = new Ping(MySimulation::boundary.pointOnBoundary({0,1}));
+    Ping *alice = new Ping(BoundaryCoordinate({0}));
+    Ping *bob = new Ping(BoundaryCoordinate({1}));
 
     // now set the agent's member pointers to point to the other agent.
     alice->channelToOther = ChannelWriter(*alice, *bob);
@@ -47,7 +44,7 @@ int main() {
     // Initialize the ping-pong by calling ping()
     alice->ping();
 
-    // Now start the simulation, here we simply set a max-time in the laboroatory frame to end the simulation
+    // Now start the simulation and set a the end of the simulation to be at time 100 in the laboroatory frame
     MySimulation::start(100);
 
     return 0;

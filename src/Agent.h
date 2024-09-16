@@ -53,16 +53,19 @@ public:
 
     static constexpr Scalar PROCESSINGTIME = 1; // local time between spatial intersection with a call and actually calling it
 
-
-    template<class F>
-    Agent(const Boundary<SpaceTime>::Position &positionOnBoundary, F &&velocity) : 
-        AgentBase<SpaceTime>(positionOnBoundary),
+    template<class S, class F = SpaceTime>
+    Agent(const BoundaryCoordinate<S> &boundaryCoord, F &&velocity = SpaceTime(1)) : 
+        AgentBase<SpaceTime>(ENV::boundary.onBoundary(boundaryCoord)),
         velocity(std::forward<F>(velocity)) {
             std::cout << "Creating agent at " << this->position() << std::endl;
             sendCallbackTo(ENV::boundary);
         }
 
-    Agent(const Boundary<SpaceTime>::Position &positionOnBoundary) : Agent(positionOnBoundary,SpaceTime(1)) { }
+
+    // template<class S, class F = SpaceTime>
+    // Agent(const ProjectToBoundary<S> &position, F &&velocity = SpaceTime(1)) : 
+    //     Agent(ProjectToBoundary<SpaceTime>(position), std::forward<F>(velocity)) {}
+
 
     template<class OTHERT>
     explicit Agent(Agent<OTHERT,ENV> &parent) : AgentBase<SpaceTime>(parent.position()), velocity(parent.velocity) {

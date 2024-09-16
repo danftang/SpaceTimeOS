@@ -28,6 +28,7 @@ public:
         for(const SCALAR &item : init) (*this)[i++] = item;
     }
 
+    static constexpr uint size() { return DIMENSIONS; }
 
     // bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
     //     SCALAR sum = 0;
