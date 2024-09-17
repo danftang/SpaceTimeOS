@@ -10,7 +10,7 @@
 // However, a laboratory provides initiating methods that do not respect limitations on the
 // maximum velocity of the flow of information.
 //
-template<SpaceTime SPACETIME, Executor EXECUTOR = ThreadPool<0>>
+template<SpaceTime SPACETIME, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<SPACETIME> >
 class ForwardSimulation {
 public:
     typedef SPACETIME                       SpaceTime;
@@ -21,7 +21,7 @@ protected:
     static inline EXECUTOR                  executor;
 
 public:
-    static inline thread_local LabTimeBoundary<SpaceTime>      boundary;
+    static inline thread_local BOUNDARY      boundary;
 
     template<std::invocable T>
     static void submit(T &&runnable) {

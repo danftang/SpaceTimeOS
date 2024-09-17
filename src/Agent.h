@@ -35,9 +35,15 @@ public:
 
 
 // Base class for all agents
+// TODO: Should we allow agents to move-to positions in their future? They effectively 
+// disappear and re-appear at a different spot. 
+// This may invalidate any raw references.
+// Any lambdas that are passed while moving-to are absorbed but not executed.
 template<class T, class ENV>
 class Agent : public AgentBase<typename ENV::SpaceTime> {
 private:
+    // TODO: If we call a vector of ChannelReaders a Field which affects a single agent,
+    // and allow ChannelWriters to be freely copied,
     std::vector<ChannelReader<T>>   inChannels;
 
 
@@ -161,6 +167,7 @@ private:
 };
 
 
+// Can be used to wrap an object that isn't derived from Agent
 template<class T, class ENV>
 class AgentWrapper : public Agent<AgentWrapper<T,ENV>,ENV> {
 public:
@@ -170,6 +177,18 @@ public:
         object(std::forward<ARGS>(args)...) {};
 
     T object;
+};
+
+
+// ...or can even mixin the object and the agent class
+template<class T, class ENV>
+class AgentMixin : public Agent<AgentMixin<T,ENV>,ENV>, T {
+public:
+    template<class P, class V, class... ARGS>
+    AgentMixin(P &&position, V &&velocity, ARGS &&... args) : 
+        Agent<AgentMixin<T,ENV>,ENV>(std::forward<P>(position), std::forward<V>(velocity)),
+        T(std::forward<ARGS>(args)...) {};
+
 };
 
 #endif

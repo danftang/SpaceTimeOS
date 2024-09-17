@@ -2,18 +2,18 @@
 
 SpaceTimeOS presents a new paradigm for distributed, multi-agent computation.
 
-In this paradigm, agents are ordinary C++ objects embued with a position and velocity in a shared space. Agents can communicate with each other by opening agent-to-agent communication channels, down which they can send lambda functions (code and data) to be executed on the remote agent. The lambda functions move at a finite speed so agents that are close to eachother can communicate more quickly than agents further away. This allows efficient, automated assignment of computational events to processing nodes, thus allowing simulations to make use of all cores of a single processor or many processors on a distributed network.
+In this paradigm, agents are ordinary C++ objects embued with a position and velocity in a shared space. Agents can communicate with each other by opening agent-to-agent communication channels, down which they can send lambda functions (code and data) to be executed on the remote agent. The lambda functions move at a finite speed so agents that are close to eachother can communicate more quickly than agents further away. This allows efficient, automated assignment of computational events to processing nodes, thus allowing simulations to be distributed across all cores of a single processor or many processors on a distributed network.
 
 ## A simple example
 
 Let's start with a simple simulation of two agents that send messages back and forth between eachother.
 
-First we define what kind of simulation we want to do. In this case we're doing a simple forward simulation, so we choose `ForwardSimulation`. This type takes two templete classes: a spacetime for the agents to inhabit and a resource to do computations on. Here we choose a Minkowski spacetime with three spatial dimensions and a time dimension, this describes the normal physical space we're all familiar with (though more on this later). To do the computation we choose a thread pool with two threads.
+First we define what kind of simulation we want to do. In this case we're doing a simple forward simulation, so we choose `ForwardSimulation`. This type takes two templete classes: a spacetime for the agents to inhabit and a resource that will perform the computations. Here we choose a Minkowski spacetime with three spatial dimensions and a time dimension, this describes the normal physical space we're all familiar with (though more on this later). To do the computation we choose a thread pool with two threads.
 ```
 typedef ForwardSimulation<Minkowski<4>, ThreadPool<2>>      MySimulation;
 ```
 
-Next we define an agent class that derives from Agent<T,S> where T is the type of the derived class (in the `curiously recurring design pattern') and S defines the simulation type that the agent belongs to.
+Next we define a class that will define our agents. Every agent should derive from Agent<T,S> where T is the type of the derived class (in the `curiously recurring template pattern') and S defines the simulation type that the agent belongs to:
 ```
 class Ping : public Agent<Ping, MySimulation> {
 public:
@@ -30,7 +30,7 @@ public:
     }
 };
 ```
-Each agent has an `channelToOther` channel, through which it can communicate with the other agent by using the `send(...)` method. The message is a lambda function that takes a reference to the other agent as its argument. When the function reaches the other agent, it will be executed with that agent as its argument.
+On construction, our `Ping` agent takes an object that provides a position in spacetime at which it should be created, this can be another agent or a point on the boundary. Our agent can send a lambda function to the other agent using `channelToOther.send(...)`. The lambda function should take a reference to the other agent as its sole argument. When the lambda reaches the other agent, it will be executed with that agent as its argument. In our case it will execute a `ping()` which will send a lambda back...
 
 Now all we need to do is initiate the simulation and set it going.
 ```
@@ -44,42 +44,40 @@ Now all we need to do is initiate the simulation and set it going.
 
     MySimulation::start(100);
 ```
-Here we create two agents, Alice and Bob. Whenever we create a new agent we need to specify a point in spacetime that the creation occurs. Since we're defining the initial state of the simulation, any new agents should be on the boundary (i.e. at the starting time in the laboratory frame), so we supply a 3D spatial position, and tag it as a coordinate on the simulation's boundary.
+Here we create two agents, Alice and Bob. Whenever we create a new agent we need to specify a point in spacetime that the creation occurs. Since we're defining the initial state of the simulation, we put the new agents on the boundary (i.e. at the simulation's start time in the laboratory frame), so we supply a 3D spatial position and tag it as a coordinate on the simulation's boundary (note that once the simulation has started, the boundary moves to the end of the simulation, so if an agent creates a new agent on the boundary during a simulation, it will be created at the end of the simulaiton).
 
-Next, we create channels between Alice and Bob using `ChannelWriter(<source>,<target>)`.
-
-The exchange is initialised by calling the `ping()` method on Alice. 
-
-The whole simulation is started by calling `MySimulation::start(...)` with the time (in the laboratory frame) that the simulation should end. Each agent is deleted when it reaches the end of the simulation, so although we don't explicitly see the deletion, there is no memory leakage.
+Next, we create channels to connect Alice and Bob using `ChannelWriter(<source>,<target>)` and initiate the exchange by calling the `ping()` method on Alice. This sends the initial lambda to Bob, but as yet we haven't actually started the computation, so it won't be delivered yet. To start the computation, we call `MySimulation::start(...)` with the time (in the laboratory frame) that the simulation should end. Each agent is deleted when it reaches the end of the simulation, so although we don't explicitly see the deletion, there is no memory leakage (the user can define a vdifferent behaviour at the boundary by specifying a different boundary type in the simulation).
 
 ## Birth and death of agents
 
-An agent can spawn new agents during a simulation by using the `new` operator in the normal way. The underlying `Agent` object must be supplied with a reference to a parent Agent, and the new agent will be constructed with the same spacetime position and velocity as its parent. Notice that an agent can't spawn a new agent at any arbitrary position in spacetime, as this may contravene causality.
+An agent can spawn new agents during a simulation by using the `new` operator in the normal way. The underlying `Agent` object can be supplied with a reference to a parent Agent which will construct the new agent at the same spacetime position and velocity as its parent. Notice that an agent can't spawn a new agent at any arbitrary position in spacetime, as this may contravene causality.
 
-An agent can die by calling its ``die()`` method. At this point in spacetime all the agent's channels are closed and the agent is deleted.
+An agent can die at any time by calling its `die()` method. At this point in spacetime all the agent's channels are closed and the agent is deleted.
 
 ## Sending channels to other agents
 
-If Bob has a channel to Alice (let's call it `channelToAlice`), and a channel to Carol (called `channelToCarol`), he may want to introduce Carol to Alice. To do this he should do the following:
+If Bob has a channel to Alice (let's call it `channelToAlice`), and a channel to Carol (called `channelToCarol`), he may want to introduce Alice to Carol. To do this he should do the following:
 ```
 channelToCarol.send([aliceChannel = SendableWriter(channelToAlice)](Carol &carol) mutable {
     ChannelWriter channelToAlice = aliceChannel.attachSource(carol);
     ...
 });
 ```
-Since a channel is between two named agents, Bob can't just send Carol a copy of his `channelToAlice`, instead he creates a `SendableWriter` from `channelToAlice` and then sends that to carol. A `SendableWriter` is a channel that is attached to a target but isn't yet attached to a source. When Carol receives the `SendableWriter`, she attaches herself using `attachSource` in order to create into a regular `ChannelWriter` which Carol can then use to communicate with Alice.
+Since a channel is between two named agents, Bob can't just send Carol a copy of his `channelToAlice` (note that `ChannelWriter` has no copy constructor in order to ensure this doesn't happen, we can only move `ChannelWriter`s). Instead Bob constructs a `SendableWriter` from his `channelToAlice`. This creates a new channel that is attached to Alice as its target but isn't yet attached to a source. When Carol receives this, she attaches herself using `attachSource`, which constructs a regular `ChannelWriter` which Carol can then use to communicate with Alice. 
 
-Note that Bob should never send Carol a raw pointer or reference to Alice because a reference at Bob's location is not guaranteed to be valid at Carol's location and could contravene causality.
+Note that Bob should never send Carol a raw pointer or reference to Alice because a reference at Bob's location will not generally be valid at Carol's location (e.g. Bob and Carol may not reside on the same physical computer, so may not share any memory).
 
 ## Spacetime as a paradigm for distributed computation
 
-In the simple example above we used a a 4-dimensional Minkowski spacetime, which describes real-world spacetime in the absence of gravitation. This is a natural choice when the agents represent objects in the real world, but users can create their own spacetimes and this allows a lot of flexibility to deal with any type of distributed simulation. We'll now show how spacetime can be used as an integral part of a definition of any multi-agent computation.
+In the example above we used a a 4-dimensional Minkowski spacetime, which describes real-world spacetime in the absence of gravitation. This is a natural choice when the agents represent objects in the real world, but users can create their own spacetimes and this allows enough flexibility to deal with any type of distributed computation. We'll now show how spacetime can be used as a conceptual tool to define multi-agent computation.
 
-We define a spacetime as a vector space equipped with a partial ordering. To qualify as a vector space we should be able to add any two vectors to get another vector and multiply a vector by a scalar to get another vector. If an agent is at position, $p$, and has a velocity, $v$, then it follows the trajectory $p + v*t$, where t is a scalar describing the time in the agent's reference frame. $v$ must be such that if $t'>t$ then $p + vt' > p + vt$.
+We define a spacetime to be a vector space equipped with a distance measure, $|.|$. If an agent is at spacetime point $p$ with 4-velocity $v$ then it will follow trajectory $p(t) = p + vt$ until it absorbs a lambda function that changes its velocity. By definition, 4-velocity, $v$, is a unit vector so $|v| = 1$ and $t$ measures the time experienced by a clock moving with the agent.
 
-If an agent emits a lambda function at point $q$, then the target agent receives the lambda function at the earliest point on its trajectory that is not before q (i.e. the point $p$ such that p>=q and there is no $r$ such that $r\ge q$ and $r \lt p$). When a lambda function reaches its target object, it is absorbed by the target and executed at that point in spacetime with the target object as argument to the function. A lambda functionmay modify the target agent's state or velocity or destroy it compleletly, it may create new objects and/or emit new lambda functions. Any new objects / lambda functions are created at the same point in spacetime as the target object. We call this an event.
+If an agent emits a lambda function at point $q$, then the target agent receives the lambda function at the earliest point on its trajectory where the distance between $q$ and the agent goes from imaginary to real. When an agent receives a lambda function, it is absorbed by the agent and, after a fixed restitution time, the agent executes the function, sending a reference to itself as argument. A lambda function may modify the target agent's state or velocity or destroy it compleletly, it may create new objects and/or emit new lambda functions. Any new objects / lambda functions are created at the same point in spacetime as the target object. The execution itself takes zero simulated time, we call this an event.
 
-A computation begins with a set of *objects* and *lambda functions* on the simulation's boundary, where the objects have velocities. This defines a set of events which constitute the simulation.
+To get a better understanding of this, consider Minkowski space whose distance measure is $\sqrt{t^2 - (x_0^2 + x_1^2 + x_2^2)}$. Note that this is different from the Euclidian distance as it can take on imaginary as well as real values. Note also that there is a manifold of points $q$ such that $|p-q|=0$, this is very different from the Euclidean distance for which the only point with zero distance from $p$ is itself.
+
+An agent that finds itself at spacetime point $p$ with velocity $v$ need only concern itself with the existance of any lambda functions on the manifold of points, $q$, such that $|p-q|=0$ and $|p+v-q|>0$. We call this the "past light cone" of $p$.
 
 Since any computation can be expressed as a partial ordering of atomic computations then it turns out that any computation can be expressed as agents moving aroung an appropriate space. [TODO: prove this]
 

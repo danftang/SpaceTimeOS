@@ -33,6 +33,13 @@ public:
 
 
 int main() {
+    // TODO: If we create a new Laboratory at Bottom and allow any agent to construct new agents any point in its
+    // future, and set up any channels between them, then we can
+    // initiate by sending lambdas to the laboratory (or using its raw reference) all initiation can be causal.
+    // Or we can allow spawnAt anywhere if it returns a channel to the new agent (only a problem if we allow 
+    // non channel-based agent discovery).
+    // This stops the user ever getting raw references to agents.
+    //
     // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
     Ping *alice = new Ping(BoundaryCoordinate({0}));
     Ping *bob = new Ping(BoundaryCoordinate({1}));
