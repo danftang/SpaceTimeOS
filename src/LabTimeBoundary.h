@@ -17,8 +17,13 @@ public:
 
     const SpaceTime labVelocity = SpaceTime(1);
 
-    Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) {
-        return (maxTime - agentPosition[0])/agentVelocity[0];
+    template<class AGENT>
+    Scalar timeToIntersection(const AGENT &agent) {
+        return timeToIntersection(agent.position(), agent.velocity());
+    }
+
+    Scalar timeToIntersection(const SpaceTime &position, const SpaceTime &velocity) {
+        return (maxTime - position[0])/velocity[0];
     }
 
     void advanceMaxTime(Scalar time) {

@@ -1,8 +1,3 @@
-// Whenever a new channel is created, In and Out smart-pointers should be created that point to it.
-// The channel will be deleted as soon as both In and Out objects are deleted.
-// At creation, the source and target are the object that spawned the channel (or the intended object). If a
-// In or Out pointer is deleted, it sets the channel's source/target pointer to nullptr. 
-
 #ifndef CHANNEL_H
 #define CHANNEL_H
 
@@ -18,21 +13,24 @@
 #include "ThreadSafeQueue.h"
 
 template<SpaceTime SPACETIME> class AgentBase;
+template<class T, class ENV> class Agent;
+template<class T> class ChannelWriter;
+template<class T> class RemoteReference;
 
-
-// T must define a spacetime, have submit()
+// The meeting point for ChannelReaders and ChannelWriters.
+// Don't use this class directly
 template<class T>
 class Channel {
 public:
     typedef typename T::SpaceTime SpaceTime;
+protected:
+    Channel(AgentBase<SpaceTime> &source) : source(&source) { }
+
+    friend ChannelWriter<T>;
+public:
 
     AgentBase<SpaceTime> *              source = nullptr; // null if closed on either end
     ThreadSafeQueue<SpatialFunction<T>> buffer;
-
-
-    Channel(AgentBase<SpaceTime> &source) : source(&source) {
-//        std::cout << "Creating channel at " << this << std::endl;
-     }
 
     Channel(const Channel<T> &other) = delete; // just don't copy channels
     Channel(Channel<T> &&) = delete; // just don't copy channels
@@ -41,27 +39,6 @@ public:
     void push(const SpaceTime &position, LAMBDA &&lambda) {
         buffer.emplace(position, std::forward<LAMBDA>(lambda));
     }
-
-
-    // // returns true if this channel is slated for deletion
-    // inline bool unblock() {
-    //     isBlocking = false;
-    //     if(target != nullptr) {
-    //         target->submit();
-    //         return false;
-    //     }
-    //     return source == nullptr;
-    // }
-
-    // // tell source to callback target on move
-    // void setBlockingCallback() {
-    //     assert(source != nullptr); // we should never block on a closed channel
-    //     isBlocking = true;
-    //     source->callbackOnMove([channel = this]() { 
-    //         if(channel->unblock()) delete(channel);
-    //     });
-    // }
-
 
     // executes the next call on the target
     // returns true if not blocking
@@ -74,21 +51,23 @@ public:
 
 };
 
-template<class T> class ChannelWriter;
-template<class T> class SendableWriter;
 
-
+// This is used by the Agent class to read lambdas from a channel
+// Don't use these directly
 template<class T>
 class ChannelReader {
 protected:
     ChannelReader(Channel<T> *channel) : channel(channel) { }
+    friend ChannelWriter<T>;
 
 public:
     typedef T::SpaceTime SpaceTime;
     typedef T::SpaceTime::Scalar Scalar;
-    friend class ChannelWriter<T>;
 
-    ChannelReader(const ChannelReader<T> &) = delete;
+    // Can't delete copy constructor as needed for capture in a std::function until C++23
+    ChannelReader(const ChannelReader<T> &) {
+        throw(std::runtime_error("Don't try to copy construct an ChannelReader. Use std::move instead"));
+    };
 
     ChannelReader(ChannelReader<T> &&moveFrom) : channel(moveFrom.channel) {
         moveFrom.channel = nullptr;
@@ -141,8 +120,8 @@ public:
     Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
         assert(channel != nullptr);
         return (empty() ?
-            (channel->source != nullptr ? (channel->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Scalar>::infinity())
-            : channel->buffer.front().timeToIntersection(agentPosition,agentVelocity));
+            (channel->source != nullptr ? (channel->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Scalar>::max())
+            : channel->buffer.front().timeToIntersection(agentPosition, agentVelocity));
     }
 
 
@@ -156,36 +135,40 @@ protected:
 };
 
 
-
-
+// This is the class used to send lambdas to other agents.
+// T is the type of agent that is the target of the channel.
 template<class T>
 class ChannelWriter
 {
 public:
     typedef T::SpaceTime SpaceTime;
-    friend class SendableWriter<T>;
+    friend class RemoteReference<T>;
 
-    ChannelWriter() : channel(nullptr) {} // a null writer indicates that the reader hasn't been generated yet
+    // a default writer indicates that the reader hasn't been generated yet
+    ChannelWriter() : channel(nullptr) {} 
 
     ChannelWriter(const ChannelWriter<T> &) = delete; // use SendableChannelWriter
 
-    // move a channel from another to this
     ChannelWriter(ChannelWriter<T> &&moveFrom) : channel(moveFrom.channel) {
         moveFrom.channel = nullptr;
     }
 
-    // open a channel on the source side
+    // create a new channel to a remote target
     ChannelWriter(AgentBase<SpaceTime> &source, const ChannelWriter<T> &target) {
         channel = new Channel<T>(source);
-        target.send([chan = channel](T &obj) {
-//            std::cout << "*** Attaching channel to target " << obj << std::endl;
-            obj.attach(ChannelReader(chan));
+        target.send([reader = ChannelReader(channel)](T &obj) mutable {
+            obj.attach(std::move(reader));
         });
     }
 
-    ChannelWriter(AgentBase<SpaceTime> &source, T &target) {
+    // attach a source to a remote reference
+    ChannelWriter(AgentBase<SpaceTime> &source, RemoteReference<T> &target) : ChannelWriter(target.attachSource(source)) { 
+    }
+
+    // create a new channel between two local agents
+    ChannelWriter(AgentBase<SpaceTime> &source, T &target) requires std::derived_from<T,Agent<T,typename T::Environment>> {
         channel = new Channel<T>(source);
-        target.attach(ChannelReader<T>(channel));
+        target.attach(ChannelReader(channel));
     }
 
 
@@ -215,6 +198,11 @@ public:
         return false;
     }
 
+    // get a remote reference to the target of this channel
+    RemoteReference<T> target() {
+        return {*this};
+    }
+
 
     const SpaceTime &sourcePosition() const {
         assert(channel != nullptr);
@@ -235,31 +223,33 @@ protected:
 };
 
 
-// Represents
-// Implemented as a channel that is connected to a dummy source that has position
-// 
+// Use this class to capture references to remote agents in lambda functions.
+// In this way, we can send references between agents.
+// This is necessary because an agent needs to block on a reference that may be
+// subsequently used to send it lambdas.
+// This is implemented as a channel that is connected to a dummy source that has
+// a position that is the emmision point of the lambda.
 template<class T>
-class SendableWriter {
+class RemoteReference {
 public:
     typedef T::SpaceTime SpaceTime;
 
     // create a new channel with a given target and a stub as source
-    SendableWriter(const ChannelWriter<T> &target) : 
+    RemoteReference(const ChannelWriter<T> &target) : 
         outChannel(*new AgentBase<SpaceTime>(target.sourcePosition()), target) { }
 
-    SendableWriter(T &target) : 
+    RemoteReference(T &target) : 
         outChannel(*new AgentBase<SpaceTime>(target.position()), target) { } // If we have a raw reference to target it must be in same position
 
-    SendableWriter(SendableWriter<T> &&other) : outChannel(std::move(other.outChannel)) { }
+    RemoteReference(RemoteReference<T> &&other) : outChannel(std::move(other.outChannel)) { }
 
     // Can't delete copy constructor as needed for capture in a std::function until C++23
-    SendableWriter(const SendableWriter<T> &dummy) {
-        // since no data will ever be sent, we can allow shallow copying as long as we 
-        // keep track of reference number..
-        throw(std::runtime_error("Don't try to copy construct an SendableWriter. Use std::move instead"));
+    RemoteReference(const RemoteReference<T> &dummy) {
+        // TODO: Could make a copy the whole channel...?
+        throw(std::runtime_error("Don't try to copy construct an RemoteReference. Use std::move instead"));
     }
 
-    ~SendableWriter() {
+    ~RemoteReference() {
         if(outChannel.channel != nullptr) { // channel is still connected to a stub object
             delete(outChannel.channel->source);
         }
@@ -277,15 +267,5 @@ public:
 protected:
     ChannelWriter<T> outChannel;
 };
-
-
-// template<class T>
-// ChannelWriter<T> makeChannel(AgentBase<typename T::SpaceTime> &source, T &target) { return { source, target }; }
-
-// template<class T>
-// SendableWriter<T> makeChannel(const ChannelWriter<T> &target) { return { target }; }
-
-// template<class T>
-// SendableWriter<T> makeChannel(T &target) { return { target }; }
 
 #endif
