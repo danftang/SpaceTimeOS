@@ -21,7 +21,9 @@ protected:
     static inline EXECUTOR                  executor;
 
 public:
+    static inline AgentBase<SpaceTime>       initialisingAgent = AgentBase<SpaceTime>(SPACETIME::BOTTOM, SPACETIME(1));
     static inline thread_local BOUNDARY      boundary;
+    static inline thread_local AgentBase<SpaceTime> *activeAgent = &initialisingAgent; // each thread has an active agent on which it is currently running
 
     template<std::invocable T>
     static void submit(T &&runnable) {
@@ -31,6 +33,7 @@ public:
 
     static void start(SpaceTime::Scalar endTime) {
         boundary.advanceMaxTime(endTime);
+        initialisingAgent.execCallbacks();
         executor.join();
     }
 

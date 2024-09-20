@@ -19,7 +19,9 @@ concept SpaceTime = requires(T position, T::Scalar distance, std::function<void(
     { position * distance } -> std::convertible_to<T>;
 
     // A position in spacetime that is in the future of all other positions (i.e. the spacetime position at which the universe ends).
-    { T::TOP } -> std::convertible_to<T>; // TODO: top can be constructed from 1 (bottom from 0) (or use std::numeric_limits<>?)
+    { T::TOP } -> std::convertible_to<T>;
+    // A position in spacetime that is in the past of all other positions (i.e. the spacetime position at which the universe starts).
+    { T::BOTTOM } -> std::convertible_to<T>;
 };
 
 template<class T>

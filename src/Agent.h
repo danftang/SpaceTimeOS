@@ -6,24 +6,25 @@
 #include "Channel.h"
 #include "Boundary.h"
 
+template<class T, class ENV> class Agent;
+
 // Base class for all agents without reference to the derived type of the agent.
 template<SpaceTime SPACETIME>
 class AgentBase {
 private:
     SPACETIME       pos;
+    SPACETIME       vel;
     CallbackQueue   callbacks;
 
-    AgentBase(const SPACETIME &position) : pos(position) { }
-
-    AgentBase(SPACETIME &&position) : pos(std::move(position)) { }
-
-    template<class T, class S> friend class Agent;
+    template<class T, class ENV> requires std::same_as<typename ENV::SpaceTime,SPACETIME> friend class Agent;
 public:
-
+    AgentBase(const SPACETIME &position, const SPACETIME &velocity) : pos(position), vel(velocity) { }
     AgentBase(const AgentBase<SPACETIME> &other) = delete; // Just don't copy objects
     AgentBase(AgentBase<SPACETIME> &&other) = delete;
 
     const SPACETIME &position() const { return pos; }
+    const SPACETIME &velocity() const { return vel; }
+    SPACETIME &velocity() { return vel; }
 
     template<std::invocable LAMBDA>
     void callbackOnMove(LAMBDA &&callback) {
@@ -52,32 +53,46 @@ private:
     std::vector<ChannelReader<T>>   inChannels;
 
     friend ENV;
-
-protected:
-    SpaceTime                       vel;
-
 public:
 
 
-    static constexpr Scalar PROCESSINGTIME = 1; // local time between spatial intersection with a call and actually calling it
+    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles.
 
-    template<class S, class F = SpaceTime>
-    Agent(const BoundaryCoordinate<S> &boundaryCoord, F &&velocity = SpaceTime(1)) : 
-        AgentBase<SpaceTime>(ENV::boundary.onBoundary(boundaryCoord)),
-        vel(std::forward<F>(velocity)) {
-            std::cout << "Creating agent at " << this->position() << std::endl;
-            sendCallbackTo(ENV::boundary);
-        }
+    // template<class S>
+    // Agent(const BoundaryCoordinate<S> &boundaryCoord, const SpaceTime &velocity = SpaceTime(1)) : 
+    //     AgentBase<SpaceTime>(ENV::boundary.onBoundary(boundaryCoord),velocity) {
+    //         std::cout << "Creating agent at " << this->position() << std::endl;
+    //         sendCallbackTo(ENV::boundary);
+    //     }
 
-    // Construct with parent's position and velocity
-    template<class OTHERT>
-    explicit Agent(const Agent<OTHERT,ENV> &parent) : AgentBase<SpaceTime>(parent.position()), vel(parent.velocity()) {
-        sendCallbackTo(parent);
+    // // Construct with parent's position and velocity
+    // template<class OTHERT>
+    // explicit Agent(const Agent<OTHERT,ENV> &parent) : AgentBase<SpaceTime>(parent.position(), parent.velocity()) {
+    //     sendCallbackTo(parent);
+    // }
+
+    // Construct with current active agent's position and velocity
+    Agent() : AgentBase<SpaceTime>(ENV::activeAgent->position(), ENV::activeAgent->velocity()) {
+        sendCallbackTo(*ENV::activeAgent);
     }
+
+    Agent(const SpaceTime &position, const SpaceTime &velocity = ENV::activeAgent->velocity()) : AgentBase<SpaceTime>(position, velocity) {
+        // make velocity unit length
+        // velocity /= sqrt(velocity*velocity);
+        if(fabs(velocity*velocity - 1) > 1e-6)
+            throw(std::runtime_error("Can't construct an agent with velocity that isn't of unit length"));
+        if(velocity[0] < 0)
+            throw(std::runtime_error("Can't construct an agent with velocity that isn't future pointing in the laboratory frame"));
+        SpaceTime displacementFromParent = position - ENV::activeAgent->position();
+        if(displacementFromParent*displacementFromParent < 0)
+            throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
+        sendCallbackTo(*ENV::activeAgent);
+    }
+
 
     // Attaches a ChannelReader to this object.
     void attach(ChannelReader<T> &&inChan) {
-        if(inChan.timeToIntersection(this->position(),velocity()) < -PROCESSINGTIME) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
+        if(inChan.timeToIntersection(this->position(),this->velocity()) < -REACTIONTIME) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
         inChannels.push_back(std::move(inChan));
     }
 
@@ -96,6 +111,7 @@ public:
 
     // Execute this objects lambdas until it blocks
     void step() {
+        ENV::activeAgent = this; // set this to the active agent so all lambdas know where they are.
         bool notBlocking = true;
         typename decltype(inChannels)::iterator earliestChanIt;
         do {
@@ -138,8 +154,6 @@ public:
 
     // Access the derived type
     inline T &derived() { return *static_cast<T *>(this); }
-
-    const SpaceTime &velocity() const { return vel; }
     
 private:
 
@@ -150,13 +164,13 @@ private:
         auto chanIt = inChannels.begin();
         auto end = inChannels.end();
         auto earliestChanIt = inChannels.end();
-        Scalar earliestIntersectionTime = ENV::boundary.timeToIntersection(this->position(),velocity());
+        Scalar earliestIntersectionTime = ENV::boundary.timeToIntersection(this->position(),this->velocity());
         while(chanIt != end) {
             if(chanIt->isClosed()) {
                 --end;
                 if(chanIt != end) *chanIt = std::move(*end);
             } else {
-                auto intersectTime = chanIt->timeToIntersection(this->position(),velocity()) + PROCESSINGTIME;
+                auto intersectTime = chanIt->timeToIntersection(this->position(),this->velocity()) + REACTIONTIME;
                 if(intersectTime <= earliestIntersectionTime) {
                     earliestIntersectionTime = intersectTime;
                     earliestChanIt = chanIt;
@@ -164,7 +178,7 @@ private:
                 ++chanIt;
             }
         }
-        if(earliestIntersectionTime > 0) this->pos += this->vel * earliestIntersectionTime;
+        if(earliestIntersectionTime > 0) this->pos += this->velocity() * earliestIntersectionTime;
         if(earliestChanIt == inChannels.end()) {
             inChannels.erase(end, inChannels.end());
             earliestChanIt = inChannels.end(); // new end pointer

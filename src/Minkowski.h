@@ -1,6 +1,7 @@
 #ifndef MINKOWSKI_H
 #define MINKOWSKI_H
 
+#include <cassert>
 #include <valarray>
 #include <array>
 #include <limits>
@@ -26,6 +27,7 @@ public:
     Minkowski(const std::initializer_list<SCALAR> &init) {
         int i=0;
         for(const SCALAR &item : init) (*this)[i++] = item;
+        while(i < DIMENSIONS) (*this)[i++] = 0;
     }
 
     static constexpr uint size() { return DIMENSIONS; }
@@ -75,14 +77,18 @@ public:
         return *this;
     }
 
+    Minkowski<DIMENSIONS,SCALAR> &operator *=(SCALAR scale) {
+        for(int i=0; i<DIMENSIONS; ++i) (*this)[i] *= scale;
+        return *this;
+    }
 
-    static const Minkowski<DIMENSIONS,SCALAR> top() {
-        Minkowski<DIMENSIONS,SCALAR> t;
-        t[0] = std::numeric_limits<SCALAR>::infinity();
-        return t;
-    } 
+    Minkowski<DIMENSIONS,SCALAR> &operator /=(SCALAR scale) {
+        for(int i=0; i<DIMENSIONS; ++i) (*this)[i] /= scale;
+        return *this;
+    }
 
-    static inline const Minkowski<DIMENSIONS,SCALAR> TOP = top();
+    static inline const Minkowski<DIMENSIONS,SCALAR> TOP = Minkowski<DIMENSIONS,SCALAR>({ std::numeric_limits<SCALAR>::infinity() }); // NB: If we dont have infinity we have to make sure there's no overflow somehow
+    static inline const Minkowski<DIMENSIONS,SCALAR> BOTTOM = Minkowski<DIMENSIONS,SCALAR>({ -std::numeric_limits<SCALAR>::infinity() });
 
     friend std::ostream &operator <<(std::ostream &out, const Minkowski<DIMENSIONS,SCALAR> &pos) {
         out << "(";
@@ -99,38 +105,25 @@ Minkowski<DIM,SCALAR> operator *(SCALAR properTime, const Minkowski<DIM,SCALAR> 
 }
 
 
-// t = B/A iff |tA - B| = 0
+// t = S/V iff |tV - S| = 0
 // where t is a scalar.
-// Equivalently
-// (tA - B).(tA - B) = 0
-// So, given that A.B = B.A 
-// A.At^2 - 2A.Bt + B.B = 0
+// i.e. if V is a velocity and S is a displacement, then S/V is the
+// time it would take in a reference framd moving with V to reach zero
+// distance to S, starting at the origin. 
+// For a suitably defined dot product, this is equivalent to
+// (tV - S).(tV - S) = 0
+// So, given that V.S = S.V 
+// V.Vt^2 - 2V.St + S.S = 0
+// N.B. if we assume |V| = 1 then V.V = 1
 template<uint DIM, class SCALAR>
 SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM,SCALAR> &velocity) {
-    SCALAR a = velocity * velocity;
-    SCALAR mb = velocity * displacement * 2; // minus b
+//    SCALAR a = velocity * velocity;
+    assert(fabs(velocity*velocity - 1) < 1e-6); // |v| should be 1
+    SCALAR mb = velocity * displacement; // -b/2
     SCALAR c = displacement * displacement;
 
-    return (mb + sqrt(mb*mb - 4*a*c))/(2*a);
+    return mb + sqrt(mb*mb - c); // quadratic formula with a=1
 }
-
-// In the 2 dimensional case we have 
-// t = B/A iff |tA - B| = 0
-// which is true if
-// (tA0 - B0)^2 = (tA1 - B1)^2
-// which is true if
-// tA0 - B0 = tA1 - B1
-// or
-// tA0 - B0 = B1 - tA1
-// so
-// t = (B0 - B1)/(A0 - A1)
-// or
-// t = (B1 - B0)/(A0 + A1)
-// we want the +ve value
-// template<class SCALAR>
-// SCALAR operator /(const Minkowski<2,SCALAR> &displacement, const Minkowski<2,SCALAR> &velocity) {
-// }
-
 
 
 #endif
