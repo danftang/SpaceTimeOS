@@ -137,6 +137,10 @@ protected:
 
 // This is the class used to send lambdas to other agents.
 // T is the type of agent that is the target of the channel.
+// Any channel has only one ChannelWriter, so this class has no copy constructor,
+// you can only std::move a ChannelWriter.
+// You also can't send a ChannelWriter over a channel, use the target() method
+// to get a RemoteReference to the target, which can be sent over a channel.
 template<class T>
 class ChannelWriter
 {
@@ -225,10 +229,9 @@ protected:
 
 // Use this class to capture references to remote agents in lambda functions.
 // In this way, we can send references between agents.
-// This is necessary because an agent needs to block on a reference that may be
-// subsequently used to send it lambdas.
-// This is implemented as a channel that is connected to a dummy source that has
-// a position that is the emmision point of the lambda.
+// This is necessary because an agent may need to block on a reference while it is in transit. 
+// This is implemented as a channel connected to a dummy source located at
+// the point of creation of the reference.
 template<class T>
 class RemoteReference {
 public:
@@ -255,7 +258,7 @@ public:
         }
     }
 
-    ChannelWriter<T> attachSource(AgentBase<SpaceTime> &source) && {
+    ChannelWriter<T> attachSource(AgentBase<SpaceTime> &source) {
 //        std::cout << this << " Attaching to source " << &source << std::endl;
         assert(outChannel.channel != nullptr);
         assert(outChannel.channel->source != nullptr);

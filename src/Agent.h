@@ -6,15 +6,24 @@
 #include "Channel.h"
 #include "Boundary.h"
 
+
+// TODO: Abstract over trajectory, so it's a function from time to spacetime point and a timeToIntersection with a lambda.\
+// (or, perhaps point of intersection [the points should always have a frame-invariant ordering])
+// ...or, since an agent must have a position at an event, the trajectory defines an offset over time (v*t)
+//    so we're only abstracting over velocity:
+//      - velocity * time = offset
+//      - position + offset = position
+//      - offset / velocity = time
+
 template<class T, class ENV> class Agent;
 
 // Base class for all agents without reference to the derived type of the agent.
 template<SpaceTime SPACETIME>
 class AgentBase {
 private:
-    SPACETIME       pos;
-    SPACETIME       vel;
-    CallbackQueue   callbacks;
+    SPACETIME               pos;
+    SPACETIME::Velocity     vel;
+    CallbackQueue           callbacks;
 
     template<class T, class ENV> requires std::same_as<typename ENV::SpaceTime,SPACETIME> friend class Agent;
 public:
@@ -55,26 +64,14 @@ private:
     friend ENV;
 public:
 
+    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
 
-    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles.
-
-    // template<class S>
-    // Agent(const BoundaryCoordinate<S> &boundaryCoord, const SpaceTime &velocity = SpaceTime(1)) : 
-    //     AgentBase<SpaceTime>(ENV::boundary.onBoundary(boundaryCoord),velocity) {
-    //         std::cout << "Creating agent at " << this->position() << std::endl;
-    //         sendCallbackTo(ENV::boundary);
-    //     }
-
-    // // Construct with parent's position and velocity
-    // template<class OTHERT>
-    // explicit Agent(const Agent<OTHERT,ENV> &parent) : AgentBase<SpaceTime>(parent.position(), parent.velocity()) {
-    //     sendCallbackTo(parent);
-    // }
 
     // Construct with current active agent's position and velocity
     Agent() : AgentBase<SpaceTime>(ENV::activeAgent->position(), ENV::activeAgent->velocity()) {
         sendCallbackTo(*ENV::activeAgent);
     }
+
 
     Agent(const SpaceTime &position, const SpaceTime &velocity = ENV::activeAgent->velocity()) : AgentBase<SpaceTime>(position, velocity) {
         // make velocity unit length
@@ -109,6 +106,7 @@ public:
         inChannels.pop_back();
     }  
 
+
     // Execute this objects lambdas until it blocks
     void step() {
         ENV::activeAgent = this; // set this to the active agent so all lambdas know where they are.
@@ -132,7 +130,7 @@ public:
                 delete(&derived()); // no more inChannels
                 return;
             } else {
-                ENV::boundary.boundaryEvent(derived()); // hit the boundary
+                ENV::boundary.execute(derived()); // hit the boundary
                 return; // paranoia
             }
         }
@@ -143,6 +141,9 @@ public:
     // which will then delete this object.
     void die() { inChannels.clear(); }
 
+    
+private:
+
     template<class DESTINATION>
     void sendCallbackTo(DESTINATION &blockingAgent) {
         blockingAgent.callbackOnMove([&me = derived()]() {
@@ -152,10 +153,9 @@ public:
         });
     }
 
+
     // Access the derived type
     inline T &derived() { return *static_cast<T *>(this); }
-    
-private:
 
     // finds the earliest channel and moves this to its intersection point,
     // detaching any closed channels as it goes.

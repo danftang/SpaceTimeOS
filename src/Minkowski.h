@@ -11,6 +11,7 @@ template<uint DIMENSIONS, class SCALAR = double>
 class Minkowski : public std::array<SCALAR,DIMENSIONS> {
 public:
     typedef SCALAR Scalar;
+    typedef Minkowski<DIMENSIONS,SCALAR> Velocity;
 
     // Default gives the reference origin 
     Minkowski() {

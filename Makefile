@@ -52,6 +52,9 @@ check:
 	$(info compile command = $(COMPILER) $(OPTFLAG) -std=$(STD) -I$(INC_DIRS) -c -o $(OBJ_DIR)/file.o $(SRC_DIR)/file.cpp)
 	$(info link command    = $(COMPILER) $(OBJ_FILES) $(LIBS) -o $(EXECUTABLE))
 
+test:
+	$(COMPILER) -std=$(STD) -I$(INC_DIRS) ./testsrc/test.cpp -o ./testsrc/a.out
+
 # rule to compile .cpp files to .o files
 $(RELEASE_DIR)/%.o: $(CPP_DIR)/%.cpp
 	mkdir -p $(dir $@)

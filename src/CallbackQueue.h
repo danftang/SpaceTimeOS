@@ -5,7 +5,8 @@
 
 #include "ThreadSafeQueue.h"
 
-// Every agent owns a set of callbacks to agents that are blocking on it.
+// A thread-safe queue of runnable functions, used to hold callbacks of
+// agents that are curently blocking on another agent. 
 class CallbackQueue {
 protected:
     ThreadSafeQueue<std::function<void()>>  callOnMove;

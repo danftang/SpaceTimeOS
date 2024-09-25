@@ -9,18 +9,30 @@
 // #include "../src/Laboratory.h"
 
 
-template<class T>
+
+template<auto LAMBDA>
 class MyTClass {
-protected:
-    void myFunc() {}
 public:
-    friend T;  
+    static auto &getLambda() { return LAMBDA; }
+
+    template<class T>
+    void execute(const T &arg) {
+        LAMBDA(arg);
+    }
+
+    void myFunc() {
+        LAMBDA.i = 3456;
+    }
 };
 
 
 class MyClass {
 protected:
 public:
+    typedef int MyType;
+
+    static inline int y = 1234;
+
     MyClass() {
         std::cout << "Creating" << std::endl;
     }
@@ -38,8 +50,6 @@ public:
     }
 
     void myFunc() {
-        MyTClass<MyClass> x;
-        x.myFunc();
     }
 
     template<class T>
@@ -71,18 +81,24 @@ public:
 };
 
 class MyDerivedDerived : public MyDerived {
-    void f() {
-        x += 2;
-    }
+};
+
+class MyConstClass {
+public:
+    static inline int i = 1234;
+    const int j=0;
+
+    void myFunc() const { std::cout << "Hello\n"; }
 };
 
 
-
 int main() {
-    MyClass x;
 
-    x.myFunc();
+    MyConstClass myObj;
 
-    std::cout << "Hello" << std::endl;
+    MyTClass<myObj> myTObj;
+
+    myTObj.myFunc();
+
     return 0;
 }

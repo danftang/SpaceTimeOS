@@ -9,14 +9,18 @@
 // (an agent can be either incoming or outgoing, depending on its velocity)
 
 template<class T>
-concept SpaceTime = requires(T position, T::Scalar distance, std::function<void()> task, int dim) {
+concept SpaceTime = requires(T position, T offset, T::Scalar time, T::Velocity velocity) {
     // Scalar is the type used to measure each dimension
     typename T::Scalar;
+    typename T::Velocity;
 
-    // A spacetime should be a vector space
-    { position + position } -> std::convertible_to<T>;
+    { position + offset } -> std::convertible_to<T>;
+
 //    { position - position } -> std::convertible_to<T>;
-    { position * distance } -> std::convertible_to<T>;
+
+    { velocity * time } -> std::convertible_to<T>;
+
+    { offset / velocity } -> std::convertible_to<typename T::Scalar>;
 
     // A position in spacetime that is in the future of all other positions (i.e. the spacetime position at which the universe ends).
     { T::TOP } -> std::convertible_to<T>;
@@ -45,6 +49,12 @@ concept Executor = requires(T executor, std::function<void()> runnable) {
 //     { T::timeToIntersection(x,x) };
 // //    { T::laboratory } -> std::derived_from<AgentBase<typename T::SpaceTime>>;
 // };
+
+template<class T, class AGENT>
+concept ForceCarrier = requires(T forceCarrier, AGENT agent) {
+    { forceCarrier.timeToIntersection(agent.position(), agent.velocity()) } -> std::convertible_to<typename T::Scalar>;
+    { forceCarrier.execute(agent) };
+};
 
 
 #endif

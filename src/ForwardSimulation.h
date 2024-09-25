@@ -6,11 +6,12 @@
 #include "Agent.h"
 #include "LabTimeBoundary.h"
 
-// A Laboratory is a spatial object in the default reference frame, at the default position
-// However, a laboratory provides initiating methods that do not respect limitations on the
-// maximum velocity of the flow of information.
-//
-template<SpaceTime SPACETIME, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<SPACETIME> >
+auto deleteAgent = [](auto &agent) { 
+        std::cout << "Agent on boundary, deleting " << &agent << std::endl;
+        delete(&agent);
+     };
+
+template<SpaceTime SPACETIME, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<SPACETIME,decltype(deleteAgent)>>
 class ForwardSimulation {
 public:
     typedef SPACETIME                       SpaceTime;
@@ -18,11 +19,11 @@ public:
     typedef ForwardSimulation<SPACETIME,EXECUTOR>  Simulation;
 protected:
 
-    static inline EXECUTOR                  executor;
+    static inline EXECUTOR                      executor;
 
 public:
-    static inline AgentBase<SpaceTime>       initialisingAgent = AgentBase<SpaceTime>(SPACETIME::BOTTOM, SPACETIME(1));
-    static inline thread_local BOUNDARY      boundary;
+    static inline AgentBase<SpaceTime>          initialisingAgent = AgentBase<SpaceTime>(SPACETIME::BOTTOM, SPACETIME(1));
+    static inline BOUNDARY                      boundary;
     static inline thread_local AgentBase<SpaceTime> *activeAgent = &initialisingAgent; // each thread has an active agent on which it is currently running
 
     template<std::invocable T>
@@ -32,21 +33,10 @@ public:
 
 
     static void start(SpaceTime::Scalar endTime) {
-        boundary.advanceMaxTime(endTime);
+        boundary.setTime(endTime);
         initialisingAgent.execCallbacks();
         executor.join();
     }
-
-    // static Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) {
-    //     return (maxTime - agentPosition[0])/agentVelocity[0];
-    // }
-
-    // static const BoundaryPos pointOnBoundary(const SpaceTime &pos) {
-    //     return { pos + velocity * timeToIntersection(pos, velocity) };
-    // }
-
-
-
 };
 
 #endif
