@@ -7,11 +7,16 @@
 #include <limits>
 #include <ostream>
 
+// A D-dimensional Minkowski spacetime is one whose inner product is defined as
+// x.y = x_0.y_0 - sum_{i=1}^D x_dy_d
+//
+// In the absence of gravity, we live in a 4D Minkowski spacetime._
 template<uint DIMENSIONS, class SCALAR = double>
 class Minkowski : public std::array<SCALAR,DIMENSIONS> {
 public:
-    typedef SCALAR Scalar;
-    typedef Minkowski<DIMENSIONS,SCALAR> Velocity;
+    typedef SCALAR                          Scalar;
+    typedef Minkowski<DIMENSIONS,SCALAR>    Velocity;
+    static constexpr uint Dimensions = DIMENSIONS;
 
     // Default gives the reference origin 
     Minkowski() {
@@ -97,13 +102,17 @@ public:
         out << ")";
         return out;
     }
+
+    friend Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime, const Minkowski<DIMENSIONS,SCALAR> &velocity) {
+        return velocity*properTime;
+    }
+
+
 };
 
+typedef Minkowski<1> GlobalTime; // 1-D Minkowski is the same as global time
 
-template<uint DIM, class SCALAR>
-Minkowski<DIM,SCALAR> operator *(SCALAR properTime, const Minkowski<DIM,SCALAR> &velocity) {
-    return velocity*properTime;
-}
+
 
 
 // t = S/V iff |tV - S| = 0
@@ -116,6 +125,7 @@ Minkowski<DIM,SCALAR> operator *(SCALAR properTime, const Minkowski<DIM,SCALAR> 
 // So, given that V.S = S.V 
 // V.Vt^2 - 2V.St + S.S = 0
 // N.B. if we assume |V| = 1 then V.V = 1
+// TODO: we can generalise this even further by solving |tV - S| = c. This corresponds to a channel that has a constant distance between emission and absorbtion
 template<uint DIM, class SCALAR>
 SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM,SCALAR> &velocity) {
 //    SCALAR a = velocity * velocity;
@@ -123,7 +133,13 @@ SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM
     SCALAR mb = velocity * displacement; // -b/2
     SCALAR c = displacement * displacement;
 
-    return mb + sqrt(mb*mb - c); // quadratic formula with a=1
+    return mb + sqrt(mb*mb - c); // quadratic formula with a=1 second^2
+}
+
+template<class SCALAR>
+SCALAR operator /(const Minkowski<1,SCALAR> &displacement, const Minkowski<1,SCALAR> &velocity) {
+    assert(fabs(velocity*velocity - 1) < 1e-6); // |v| should be 1
+    return displacement[0]; // in 1D case, the square root of the quadratic identically goes to zero, so we don't need to calculate it 
 }
 
 

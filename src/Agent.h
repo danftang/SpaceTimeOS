@@ -16,16 +16,18 @@
 //      - offset / velocity = time
 
 template<class T, class ENV> class Agent;
+template<SpaceTime SPACETIME> class AgentBase;
 
+// TODO:
+//  - ensure position access is thread-safe
+//  - encapsulate pos/vel into a trajectory so that we don't need to speicalise the 1D case.
 // Base class for all agents without reference to the derived type of the agent.
 template<SpaceTime SPACETIME>
-class AgentBase {
+class AgentBase : public CallbackQueue {
 private:
-    SPACETIME               pos;
+    SPACETIME               pos; // TODO:
     SPACETIME::Velocity     vel;
-    CallbackQueue           callbacks;
 
-    template<class T, class ENV> requires std::same_as<typename ENV::SpaceTime,SPACETIME> friend class Agent;
 public:
     AgentBase(const SPACETIME &position, const SPACETIME &velocity) : pos(position), vel(velocity) { }
     AgentBase(const AgentBase<SPACETIME> &other) = delete; // Just don't copy objects
@@ -35,13 +37,26 @@ public:
     const SPACETIME &velocity() const { return vel; }
     SPACETIME &velocity() { return vel; }
 
-    template<std::invocable LAMBDA>
-    void callbackOnMove(LAMBDA &&callback) {
-        callbacks.push(std::forward<LAMBDA>(callback));
-    }
+    void moveForward(SPACETIME::Scalar time) { pos += vel * time; }
 
-    void execCallbacks() { callbacks.execAll(); }
+};
 
+// Base class specialization for agents in a global time.
+// In this case all agents have velocity 1 so no need to store it.
+template<SpaceTime SPACETIME> requires (SPACETIME::Dimensions == 1)
+class AgentBase<SPACETIME> : public CallbackQueue {
+private:
+    SPACETIME               pos;
+
+public:
+    AgentBase(const SPACETIME &position, const SPACETIME &velocity) : pos(position) { }
+    AgentBase(const AgentBase<SPACETIME> &other) = delete; // Just don't copy objects
+    AgentBase(AgentBase<SPACETIME> &&other) = delete;
+
+    const SPACETIME &position() const { return pos; }
+    const SPACETIME velocity() const { return SPACETIME(1); }
+
+    void moveForward(SPACETIME::Scalar time) { pos[0] += time; }
 };
 
 
@@ -146,7 +161,7 @@ private:
 
     template<class DESTINATION>
     void sendCallbackTo(DESTINATION &blockingAgent) {
-        blockingAgent.callbackOnMove([&me = derived()]() {
+        blockingAgent.pushCallback([&me = derived()]() {
                 ENV::submit([&me]() {
                     me.step();
                 });
@@ -178,7 +193,7 @@ private:
                 ++chanIt;
             }
         }
-        if(earliestIntersectionTime > 0) this->pos += this->velocity() * earliestIntersectionTime;
+        if(earliestIntersectionTime > 0) this->moveForward(earliestIntersectionTime);
         if(earliestChanIt == inChannels.end()) {
             inChannels.erase(end, inChannels.end());
             earliestChanIt = inChannels.end(); // new end pointer

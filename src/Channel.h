@@ -111,10 +111,10 @@ public:
     bool isClosed() const { return channel->source == nullptr && empty(); }
 
     template<std::invocable LAMBDA>
-    inline void callbackOnMove(LAMBDA &&lambda) {
+    inline void pushCallback(LAMBDA &&lambda) {
         assert(channel != nullptr);
         assert(channel->source != nullptr);
-        channel->source->callbackOnMove(std::forward<LAMBDA>(lambda));
+        channel->source->pushCallback(std::forward<LAMBDA>(lambda));
     }
 
     Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
