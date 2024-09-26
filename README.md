@@ -90,7 +90,7 @@ The above algorithm goes a long way to our goal but we may get situations when o
 
 In the 1-dimensional case, an agent simply moved forward in time. In the more general case, an agent follows a "trajectory" which is a subset of spacetime points which happen to be completely ordered. To ensure causal ordering, we specify that an event at $x$ (i.e. with timestap $x$) can only cause an event on agent $A$ at the eariest point on $A$s trajectory that is after $x$.
 
-Any vector space equipped with an inner product is a spacetime. Given a reference vector $r$ (which defines an "arrow of time") the inner product defines a partial ordering on points in the vector space so that $y > x$ iff $(y-x).(y-x) \ge 0$ and $r.(y-x) > 0$. Given a point $x$, we call the set of points $\left\{y : y > x\right\}$ the *future light cone* of $x$.
+Any vector space equipped with an inner product is a spacetime. Given a reference vector $r$ (which defines an "arrow of time") the inner product defines a partial ordering on points in the vector space so that $y > x$ iff $(y-x).(y-x) \ge 0$ and $r.(y-x) > 0$. Given a point $x$, we call the set of points $\lbrace y : y > x\rbrace$ the *future light cone* of $x$.
 
 For any point $x$ on an agent's trajectory we define the 4-velocity to be the unit vector that is tangent to the trajectory at $x$ and in $x$'s future light cone. An agent's 4-velocity remains constant until it experiences an event that changes it, so between events, an agent follows a trajectory through spacetime defined by
 $$x(t) = x_0 + vt$$
