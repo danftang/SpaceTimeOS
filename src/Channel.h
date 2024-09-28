@@ -26,7 +26,7 @@ public:
 protected:
     Channel(AgentBase<SpaceTime> &source) : source(&source) { }
 
-    friend ChannelWriter<T>;
+    friend ChannelWriter<T>; // only ChannelWriter can construct a new channel.
 public:
 
     AgentBase<SpaceTime> *              source = nullptr; // null if closed on either end
@@ -36,8 +36,12 @@ public:
     Channel(Channel<T> &&) = delete; // just don't copy channels
 
     template<std::convertible_to<std::function<void(T &)>> LAMBDA>
-    void push(const SpaceTime &position, LAMBDA &&lambda) {
-        buffer.emplace(position, std::forward<LAMBDA>(lambda));
+    bool push(LAMBDA &&lambda) {
+        if(source != nullptr) {
+            buffer.emplace(source->position(), std::forward<LAMBDA>(lambda));
+            return true;
+        }
+        return false;
     }
 
     // executes the next call on the target
@@ -48,6 +52,8 @@ public:
         buffer.pop();
         return true;
     }
+
+//    bool empty() const { return buffer.empty(); }
 
 };
 
@@ -84,6 +90,7 @@ public:
         }
     }
 
+    // Could type-delete by making this into a std::function at construction (and separating position and function into two buffers)
     inline bool executeNext(T &target) const {
         assert(channel != nullptr);
         return channel->executeNext(target);
@@ -126,7 +133,7 @@ public:
 
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelReader<T> &in) {
-        out << in.channel->target;
+        out << in.channel;
         return out;
     }
 
@@ -141,6 +148,14 @@ protected:
 // you can only std::move a ChannelWriter.
 // You also can't send a ChannelWriter over a channel, use the target() method
 // to get a RemoteReference to the target, which can be sent over a channel.
+// TODO: think of a way we can have a ChannelWriter to a derived type of the target
+// (or some way to deal with polymorphism among agents)
+//  - Channel could implement two interfaces (Read<T1> and Write<T2>)
+//  - Channel has a base type which allows writing, and a derived type which allows reading and implements an interface
+//    the writer has a ref to base type and the reader has a ref to derived type's interface
+//   - runtime typesafe execution using std::any or wrap in std::variant, or have VariantChannelWriter (or VariantChannelReader)
+//   - If the channel holds the target pointer, then the buffer can hold runnables and the reader can be type unaware
+//     and we can merge AgentBase and Agent (though Agents would then need virtual destructors)
 template<class T>
 class ChannelWriter
 {
@@ -194,12 +209,8 @@ public:
 
     template<std::convertible_to<std::function<void(T &)>> LAMBDA>
     bool send(LAMBDA &&function) const {
-        assert(channel != nullptr);
-        if(channel->source != nullptr) {
-            channel->push(channel->source->position(), std::forward<LAMBDA>(function));
-            return true;
-        }
-        return false;
+        if(channel == nullptr) return false;
+        return channel->push(std::forward<LAMBDA>(function));
     }
 
     // get a remote reference to the target of this channel
@@ -213,11 +224,9 @@ public:
         return channel->source->pos;
     }
 
-    // // create a new channel whose target is the same as this, by sending a message down this channel.
-    // SendableWriter<T> unattachedCopy() const { return SendableWriter<T>(*this); }
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelWriter<T> &chan) {
-        out << chan.channel->target;
+        out << chan.channel;
         return out;
     }
 
@@ -241,6 +250,7 @@ public:
     RemoteReference(const ChannelWriter<T> &target) : 
         outChannel(*new AgentBase<SpaceTime>(target.sourcePosition()), target) { }
 
+    // create a new channel to a local target
     RemoteReference(T &target) : 
         outChannel(*new AgentBase<SpaceTime>(target.position()), target) { } // If we have a raw reference to target it must be in same position
 

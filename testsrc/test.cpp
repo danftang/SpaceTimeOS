@@ -2,6 +2,7 @@
 #include <queue>
 #include <functional>
 #include <vector>
+#include <memory>
 
 // #include "../src/Concepts.h"
 // #include "../src/Minkowski.h"
@@ -94,11 +95,18 @@ public:
 
 int main() {
 
-    MyConstClass myObj;
+    std::shared_ptr<MyBase> pBase;
+    std::shared_ptr<MyDerived> pDerived;
 
-    MyTClass<myObj> myTObj;
+    pBase = pDerived;
+    pDerived = pBase;
 
-    myTObj.myFunc();
+    std::function<void(MyBase &)> fBase;
+    std::function<void(MyDerived &)> fDerived;
+
+    fDerived = fBase;
+    fBase = fDerived;
+
 
     return 0;
 }
