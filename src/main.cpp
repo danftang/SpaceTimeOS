@@ -14,11 +14,11 @@ typedef ForwardSimulation<Minkowski<1> , ThreadPool<2>>      MySimulation;
 
 // Now create a class derived from Agent to exist within the simulation.
 // This class just sends a ping to another agent.
-class Ping : public Agent<Ping, MySimulation> {
+class Ping : public Agent<MySimulation> {
 public:
-    ChannelWriter<Ping> channelToOther;
+    Channel<Ping> channelToOther;
 
-    Ping(const MySimulation::SpaceTime &position) : Agent<Ping,MySimulation>(position) { }
+    Ping(const MySimulation::SpaceTime &position) : Agent<MySimulation>(position) { }
 
     void ping() {
         std::cout << "Ping from " << position() << std::endl;
@@ -41,8 +41,8 @@ int main() {
     Ping *bob = new Ping(0);
 
     // now set the agent's member pointers to point to the other agent.
-    alice->channelToOther = ChannelWriter(*alice, *bob);
-    bob->channelToOther   = ChannelWriter(*bob, *alice);
+    alice->channelToOther = Channel(*alice, *bob);
+    bob->channelToOther   = Channel(*bob, *alice);
 
     // Initialize the ping-pong by calling ping()
     alice->ping();

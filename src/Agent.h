@@ -15,80 +15,38 @@
 //      - position + offset = position
 //      - offset / velocity = time
 
-template<class T, class ENV> class Agent;
-template<SpaceTime SPACETIME> class AgentBase;
 
 // TODO:
 //  - ensure position access is thread-safe
 //  - encapsulate pos/vel into a trajectory so that we don't need to speicalise the 1D case.
 // Base class for all agents without reference to the derived type of the agent.
-template<SpaceTime SPACETIME>
-class AgentBase : public CallbackQueue {
-private:
-    SPACETIME               pos; // TODO:
-    SPACETIME::Velocity     vel;
-
-public:
-    AgentBase(const SPACETIME &position, const SPACETIME &velocity) : pos(position), vel(velocity) { }
-    AgentBase(const AgentBase<SPACETIME> &other) = delete; // Just don't copy objects
-    AgentBase(AgentBase<SPACETIME> &&other) = delete;
-
-    const SPACETIME &position() const { return pos; }
-    const SPACETIME &velocity() const { return vel; }
-    SPACETIME &velocity() { return vel; }
-
-    void moveForward(SPACETIME::Scalar time) { pos += vel * time; }
-
-};
-
-// Base class specialization for agents in a global time.
-// In this case all agents have velocity 1 so no need to store it.
-template<SpaceTime SPACETIME> requires (SPACETIME::Dimensions == 1)
-class AgentBase<SPACETIME> : public CallbackQueue {
-private:
-    SPACETIME               pos;
-
-public:
-    AgentBase(const SPACETIME &position, const SPACETIME &velocity) : pos(position) { }
-    AgentBase(const AgentBase<SPACETIME> &other) = delete; // Just don't copy objects
-    AgentBase(AgentBase<SPACETIME> &&other) = delete;
-
-    const SPACETIME &position() const { return pos; }
-    const SPACETIME velocity() const { return SPACETIME(1); }
-
-    void moveForward(SPACETIME::Scalar time) { pos[0] += time; }
-};
-
-
-// Base class for all agents when the derived type is known.
-// To define a new agent, derive from this type (or use AgentWrapper)
-// T should be the derived type (in the Curiously Recurring Template Pattern)
-// ENV should be the simulation type.
-template<class T, class ENV>
-class Agent : public AgentBase<typename ENV::SpaceTime> {
+template<class ENV>
+class Agent : public CallbackQueue {
 public:
     typedef ENV::SpaceTime              SpaceTime;
     typedef ENV::SpaceTime::Scalar      Scalar;
-    typedef T                           DerivedType;
     typedef ENV                         Environment;
+
 private:
-    // TODO: If we call a vector of ChannelReaders a Field which affects a single agent,
-    // and allow ChannelWriters to be freely copied,
-    std::vector<ChannelReader<T>>   inChannels;
+    SpaceTime               pos; // TODO: replace with TRAJECTORY template
+    SpaceTime::Velocity     vel;
+
+    std::vector<ChannelExecutor<ENV>>   inChannels;
 
     friend ENV;
+
 public:
 
-    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
-
+    Agent(const Agent<ENV> &other) = delete; // Just don't copy objects
+    Agent(Agent<ENV> &&other) = delete;
 
     // Construct with current active agent's position and velocity
-    Agent() : AgentBase<SpaceTime>(ENV::activeAgent->position(), ENV::activeAgent->velocity()) {
+    Agent() : pos(ENV::activeAgent->position()), vel(ENV::activeAgent->velocity()) {
         sendCallbackTo(*ENV::activeAgent);
     }
 
 
-    Agent(const SpaceTime &position, const SpaceTime &velocity = ENV::activeAgent->velocity()) : AgentBase<SpaceTime>(position, velocity) {
+    Agent(const SpaceTime &position, const SpaceTime &velocity = ENV::activeAgent->velocity()) : pos(position), vel(velocity) {
         // make velocity unit length
         // velocity /= sqrt(velocity*velocity);
         if(fabs(velocity*velocity - 1) > 1e-6)
@@ -102,14 +60,28 @@ public:
     }
 
 
+    virtual ~Agent() {} // necessary to delete an agent without knowing the derived typw
+
+    const SpaceTime &position() const { return pos; }
+    const SpaceTime &velocity() const { return vel; }
+    SpaceTime &velocity() { return vel; }
+
+    void moveForward(Scalar time) { pos += vel * time; }
+
+
+    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
+
+
+
+
     // Attaches a ChannelReader to this object.
-    void attach(ChannelReader<T> &&inChan) {
+    void attach(ChannelExecutor<ENV> &&inChan) {
         if(inChan.timeToIntersection(this->position(),this->velocity()) < -REACTIONTIME) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
         inChannels.push_back(std::move(inChan));
     }
 
     // returns a reference to an inCahnnel.
-    ChannelReader<T> &getInChannel(size_t index) { return inChannels[index]; }
+    ChannelExecutor<ENV> &getInChannel(size_t index) { return inChannels[index]; }
 
     // returns the number of in Channels.
     size_t nChannels() { return inChannels.size(); }
@@ -130,7 +102,7 @@ public:
         do {
             earliestChanIt = moveToEarliestChannel();
             if(earliestChanIt != inChannels.end()) {
-                notBlocking = earliestChanIt->executeNext(derived());
+                notBlocking = earliestChanIt->executeNext(*this);
             } else {
                 notBlocking = false;
             }
@@ -142,10 +114,9 @@ public:
             // no inChannels or hit end of simulation
             if(inChannels.empty()) {
                 std::cout << "Out of inCahnnels, deleting " << this << std::endl;
-                delete(&derived()); // no more inChannels
-                return;
+                delete(this); return; // no more inChannels
             } else {
-                ENV::boundary.execute(derived()); // hit the boundary
+                ENV::boundary.execute(*this); // hit the boundary
                 return; // paranoia
             }
         }
@@ -161,16 +132,16 @@ private:
 
     template<class DESTINATION>
     void sendCallbackTo(DESTINATION &blockingAgent) {
-        blockingAgent.pushCallback([&me = derived()]() {
-                ENV::submit([&me]() {
-                    me.step();
+        blockingAgent.pushCallback([me = this]() {
+                ENV::submit([me]() {
+                    me->step();
                 });
         });
     }
 
 
     // Access the derived type
-    inline T &derived() { return *static_cast<T *>(this); }
+    // inline T &derived() { return *static_cast<T *>(this); }
 
     // finds the earliest channel and moves this to its intersection point,
     // detaching any closed channels as it goes.
@@ -209,18 +180,18 @@ private:
 // The underlying class can be accessed through the 'object' member
 // or by deference.
 template<class CLASSTOWRAP, class ENV>
-class AgentWrapper : public Agent<AgentWrapper<CLASSTOWRAP,ENV>,ENV> {
+class AgentWrapper : public Agent<ENV> {
 protected:
     template<std::convertible_to<typename ENV::SpaceTime> P, std::convertible_to<typename ENV::SpaceTime> V, class... ARGS>
     AgentWrapper(P &&position, V &&velocity, ARGS &&... args) : 
-        Agent<AgentWrapper<CLASSTOWRAP,ENV>,ENV>(std::forward<P>(position), std::forward<V>(velocity)),
+        Agent<ENV>(std::forward<P>(position), std::forward<V>(velocity)),
         object(std::forward<ARGS>(args)...) {};
 
 public:
 
-    template<class PARENT, class... ARGS>
-    AgentWrapper(const Agent<PARENT,ENV> &parent, ARGS &&... args) : 
-        Agent<AgentWrapper<CLASSTOWRAP,ENV>,ENV>(parent),
+    template<class... ARGS>
+    AgentWrapper(const Agent<ENV> &parent, ARGS &&... args) : 
+        Agent<ENV>(parent),
         object(std::forward<ARGS>(args)...) {};
 
 
@@ -237,16 +208,11 @@ public:
 // T should be the type we want to wrap
 // ENV should be the simulation type.
 template<class T, class ENV>
-class AgentMixin : public Agent<AgentMixin<T,ENV>,ENV>, T {
+class AgentMixin : public Agent<ENV>, T {
 public:
     template<std::convertible_to<typename ENV::SpaceTime> P, std::convertible_to<typename ENV::SpaceTime> V, class... ARGS>
     AgentMixin(P &&position, V &&velocity, ARGS &&... args) : 
-        Agent<AgentMixin<T,ENV>,ENV>(std::forward<P>(position), std::forward<V>(velocity)),
-        T(std::forward<ARGS>(args)...) {};
-
-    template<class PARENT, class... ARGS>
-    AgentMixin(const Agent<PARENT,ENV> &parent, ARGS &&... args) : 
-        Agent<AgentMixin<T,ENV>,ENV>(parent),
+        Agent<ENV>(std::forward<P>(position), std::forward<V>(velocity)),
         T(std::forward<ARGS>(args)...) {};
 };
 

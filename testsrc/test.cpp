@@ -34,9 +34,11 @@ public:
 
     static inline int y = 1234;
 
+
     MyClass() {
         std::cout << "Creating" << std::endl;
     }
+
 
     // MyClass(const MyClass &) {
     //     std::cout << "Copying" << std::endl;
@@ -93,6 +95,10 @@ public:
 };
 
 
+auto converter() {
+    return []() { std::cout << "Hello"; };
+}
+
 int main() {
 
     std::shared_ptr<MyBase> pBase;
@@ -104,8 +110,10 @@ int main() {
     std::function<void(MyBase &)> fBase;
     std::function<void(MyDerived &)> fDerived;
 
-    fDerived = fBase;
+    fDerived = std::move(fBase);
     fBase = fDerived;
+
+
 
 
     return 0;

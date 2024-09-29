@@ -15,13 +15,13 @@ First we choose a class that defines what kind of simulation we want to do. Let'
 typedef ForwardSimulation<Minkowski<4>, ThreadPool<2>>      MySimulation;
 ```
 
-Next we make a class to define our agent's behaviour. Every agent should derive from `Agent<T,S>` where T is the type of the derived class (in the [Curiously Recurring Template Pattern](https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern)) and S defines the simulation type that the agent belongs to:
+Next we make a class to define our agent's behaviour. Every agent should derive from `Agent<S>` where S defines the simulation type that the agent belongs to:
 ```
-class Ping : public Agent<Ping, MySimulation> {
+class Ping : public Agent<MySimulation> {
 public:
-    ChannelWriter<Ping> channelToOther;
+    Channel<Ping> channelToOther;
 
-    Ping(const MySimulation::SpaceTime &position) : Agent<Ping,MySimulation>(position) { }
+    Ping(const MySimulation::SpaceTime &position) : Agent<MySimulation>(position) { }
 
     void ping() {
         std::cout << "Ping from " << position() << std::endl;
@@ -40,15 +40,15 @@ Now all we need to do is initiate the simulation, connect the agents and set thi
     Ping *alice = new Ping({0,0,0,0});
     Ping *bob   = new Ping({0,0,0,1});
 
-    alice->channelToOther = ChannelWriter(*alice, *bob);
-    bob->channelToOther   = ChannelWriter(*bob, *alice);
+    alice->channelToOther = Channel(*alice, *bob);
+    bob->channelToOther   = Channel(*bob, *alice);
 
     alice->ping();
 
     MySimulation::start(100);
 ```
 
-Here we create two agents, Alice and Bob, at given positions in spacetime (we don't specify velocity, so they both take on the velocity of the default reference frame). Next, we create new channels to connect Alice and Bob using `ChannelWriter(<source>,<target>)` and initiate the exchange by calling the `ping()` method on Alice. This emits an initial lambda, which will be delivered to Bob when we start the simulation. To do that we call `MySimulation::start(...)` with the time (in the laboratory frame) that the simulation should end. Each agent is deleted when it reaches the end of the simulation, so although we don't explicitly see the deletion, there is no memory leakage (the user can define a different behaviour at the boundary by specifying a different boundary type in the simulation).
+Here we create two agents, Alice and Bob, at given positions in spacetime (we don't specify velocity, so they both take on the velocity of the default reference frame). Next, we create new channels to connect Alice and Bob using `Channel(<source>,<target>)` and initiate the exchange by calling the `ping()` method on Alice. This emits an initial lambda, which will be delivered to Bob when we start the simulation. To do that we call `MySimulation::start(...)` with the time (in the laboratory frame) that the simulation should end. Each agent is deleted when it reaches the end of the simulation, so although we don't explicitly see the deletion, there is no memory leakage (the user can define a different behaviour at the boundary by specifying a different boundary type in the simulation).
 
 The whole program can be found in [`main.cpp`](src/main.cpp) in this repository.
 
@@ -65,12 +65,12 @@ An agent can die at any time if it calls its `die()` method. At this point in sp
 If Bob has a channel to Alice (let's call it `channelToAlice`), and a channel to Carol (`channelToCarol`), he may want to introduce Alice to Carol. To do this Bob needs to get a `RemoteReference` to Alice, which he does by calling `channelToAlice.target()`. He can then send the `RemoteReference` to Carol, who can then use it to create a channel to Alice. For example:
 ```
 channelToCarol.send([remoteReferenceToAlice = channelToAlice.target()](Carol &carol) mutable {
-    carol.channelToAlice = ChannelWriter(carol, remoteReferenceToAlice);
+    carol.channelToAlice = Channel(carol, remoteReferenceToAlice);
     ...
 });
 ``` 
 
-Note that Bob should never send Carol a raw pointer or reference to Alice because a reference at one spacetime location is not valid at any other location (e.g. Bob and Carol may not even reside on the same physical computer). He also shouldn't send a `ChannelWriter` directly, as a channel is between two fixed agents (to prevent this, `ChannelWriter` doesn't have a copy constructor so can't be captured in a `std::function`. To pass a `ChannelWriter` to a method, it must be moved rather than copied).
+Note that Bob should never send Carol a raw pointer or reference to Alice because a reference at one spacetime location is not valid at any other location (e.g. Bob and Carol may not even reside on the same physical computer). He also shouldn't send a `Channel` directly, as a channel is between two fixed agents (to prevent this, `Channel` doesn't have a copy constructor so can't be captured in a `std::function`. To pass a `Channel` to a method, it must be moved rather than copied).
 
 ## Spacetime as a means to distributing multi-agent computation
 
