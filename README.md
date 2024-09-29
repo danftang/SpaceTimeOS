@@ -2,13 +2,13 @@
 
 SpaceTimeOS is a new paradigm for distributed, multi-agent computation.
 
-In this paradigm, agents are ordinary C++ objects embued with a position and velocity in a shared, simulated space. Agents communicate with each other by sending lambda functions (code and data) between themselves. The lambda functions move at a finite speed through the simulated space so agents that are close to eachother can communicate more quickly than agents further away. This allows efficient, automated assignment of computations to processing nodes, thus allowing simulations to be distributed across all cores of a single processor or many processors on a distributed network.
+In this paradigm, agents are ordinary C++ objects embued with a trajectory through a shared, simulated space. Agents communicate by sending lambda functions (code and data) to each other. The lambda functions move at a finite speed through the simulated space so agents that are close to eachother can communicate more quickly (in simulated time) than agents further away. This allows efficient, automated assignment of computations to processing nodes, thus allowing simulations to be distributed across all cores of a single processor or many processors on a distributed network.
 
-This paradigm fits naturally into simulations of agents in a simulated spatial environment. However, by thinking of spacetime as a generalisation of time, we show how this paradigm is also useful even for simulations of agents that aren't initially considered in spatial terms.
+This paradigm fits naturally into simulations of agents moving around a spatial environment. However, by thinking of spacetime as a generalisation of time, we show how this paradigm is also useful even for simulations of agents that aren't initially considered in spatial terms.
 
 ## A simple example
 
-To show how this works in practice, let's build a simple simulation of two agents that send messages back and forth between eachother.
+To show how this works in practice, let's build a simple simulation of two agents that send messages back and forth between each other.
 
 First we choose a class that defines what kind of simulation we want to do. Let's start with a simple forward simulation, so we choose the `ForwardSimulation` class. This class takes two templates: a spacetime for the agents to inhabit and a resource that will perform the computations. Let's choose a Minkowski spacetime with three spatial dimensions and a time dimension (this describes the normal physical space we're all familiar with, but without gravitation) and a thread pool with two threads to do the computation. We'll define a type `MySimulation` for convenience:
 ```
