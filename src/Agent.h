@@ -4,7 +4,6 @@
 #include "Concepts.h"
 #include "CallbackQueue.h"
 #include "Channel.h"
-#include "Boundary.h"
 
 
 // TODO: Abstract over trajectory, so it's a function from time to spacetime point and a timeToIntersection with a lambda.\

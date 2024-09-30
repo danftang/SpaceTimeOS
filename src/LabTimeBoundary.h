@@ -1,7 +1,6 @@
 #ifndef LABTIMEBOUNDARY_H
 #define LABTIMEBOUNDARY_H
 
-#include "Boundary.h"
 
 // Represents a boundary at a constant time in the laboratory frame
 // LAMBDA should be a lambda function which takes an agent reference as argument.
