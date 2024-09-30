@@ -74,7 +74,7 @@ Note that Bob should never send Carol a raw pointer or reference to Alice becaus
 
 ## Spacetime as a means to distributing multi-agent computation
 
-Any multi-agent computation can be thought of in terms of a set of agents on which events occur. An agent can respond to an event by performing internal computations, creating new agents, destroying existing agents and/or causing more events. Our aim is to perform such a computation efficiently across multiple processors in such a way that the output of the computation is deterministic (i.e. there are no race conditions).
+Any multi-agent computation can be thought of in terms of a set of agents on which events occur. An agent can respond to an event by performing internal computations, creating new agents, destroying existing agents and/or causing more events. Our aim is to perform such a computation efficiently across multiple processors in such a way that the output of the computation is deterministic and independent of the number and nature of the processors (i.e. there are no race conditions and any randomness is taken from pseudo-random number generators with well defined seeds).
 
 We assume that any two events on the same agent are non-commutative (i.e. executing them in a different order may lead to a different result) and that any two events on different agents are commutative (i.e. we can execute them in either order, and the result is the same - this comes naturally since an event on one agent can't directly affect another agent: it can only cause a separate event on another agent). 
 

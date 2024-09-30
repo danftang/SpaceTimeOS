@@ -57,4 +57,17 @@ concept ForceCarrier = requires(T forceCarrier, AGENT agent) {
 };
 
 
+template<class T, class MANIFOLD>
+concept Trajectory = requires(T trajectory, MANIFOLD manifold, T::Scalar time) {
+    { trajectory.timeToIntersection(manifold) } -> std::convertible_to<typename T::Scalar>;
+    { trajectory.moveOriginTo(time) };
+    { trajectory.origin() } -> std::convertible_to<typename T::SpaceTime>;
+};
+
+template<class T>
+concept Manifold = requires(T manifold, T::Spacetime point) {
+    { manifold.distanceTo(point) } -> std::convertible_to<typename T::Scalar>;
+};
+
+
 #endif

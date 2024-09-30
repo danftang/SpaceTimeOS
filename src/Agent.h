@@ -4,7 +4,6 @@
 #include "Concepts.h"
 #include "CallbackQueue.h"
 #include "Channel.h"
-#include "Boundary.h"
 
 
 // TODO: Abstract over trajectory, so it's a function from time to spacetime point and a timeToIntersection with a lambda.\
@@ -70,9 +69,6 @@ public:
 
 
     static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
-
-
-
 
     // Attaches a ChannelReader to this object.
     void attach(ChannelExecutor<ENV> &&inChan) {
