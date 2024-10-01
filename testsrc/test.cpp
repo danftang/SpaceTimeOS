@@ -9,7 +9,7 @@
 // #include "../src/ThreadPool.h"
 // #include "../src/Laboratory.h"
 
-
+class MyVoid {};
 
 template<auto LAMBDA>
 class MyTClass {
@@ -33,7 +33,7 @@ public:
     typedef int MyType;
 
     static inline int y = 1234;
-
+    int x;
 
     MyClass() {
         std::cout << "Creating" << std::endl;
@@ -101,19 +101,19 @@ auto converter() {
 
 int main() {
 
-    std::shared_ptr<MyBase> pBase;
-    std::shared_ptr<MyDerived> pDerived;
+    // std::shared_ptr<MyBase> pBase;
+    // std::shared_ptr<MyDerived> pDerived;
 
-    pBase = pDerived;
-    pDerived = pBase;
+    // pBase = pDerived;
+    // pDerived = pBase;
 
-    std::function<void(MyBase &)> fBase;
-    std::function<void(MyDerived &)> fDerived;
+    // std::function<void(MyBase &)> fBase;
+    // std::function<void(MyDerived &)> fDerived;
 
-    fDerived = std::move(fBase);
-    fBase = fDerived;
+    // fDerived = std::move(fBase);
+    // fBase = fDerived;
 
-
+    constexpr uint S = sizeof(MyClass);
 
 
     return 0;
