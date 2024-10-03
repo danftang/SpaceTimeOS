@@ -3,23 +3,29 @@
 
 #include <functional>
 
-// TODO: Should a SpaceTime define its own boundaries by defining a + b to return TOP if it is out
-// of bounds? Any point on a boundary can be classified as time-like-incoming (agents can only enter the simulation at that point)
-// time-like-outgoing (agents can only leave the simulation at that point) and space-like
-// (an agent can be either incoming or outgoing, depending on its velocity)
 
+// A spacetime is simply an partially ordered set
+// Note that since it is 
 template<class T>
-concept SpaceTime = requires(T position, T offset, T::Scalar time, T::Velocity velocity) {
+concept SpaceTime = requires(T point) {
+    {point < point } -> std::same_as<bool>;
+    
+    // A position in spacetime that is in the future of all other positions (i.e. the spacetime position at which the universe ends).
+    { T::TOP } -> std::convertible_to<T>;
+    // A position in spacetime that is in the past of all other positions (i.e. the spacetime position at which the universe starts).
+    { T::BOTTOM } -> std::convertible_to<T>;
+};
 
-
-    // Scalar is the type used to measure local time (only related to position via * and /)
-    typename T::Scalar;     
-
+// A vector spacetime 
+template<class T>
+concept VectorSpaceTime = SpaceTime<T> && requires(T position, T offset, T::Time time, T::Velocity velocity) {
     // Velocity is the type used to measure the change in spacetime position per unit local-time
     // so defines a trajectory through spacetime parameterised by time.
-    typename T::Velocity;   
+    // or more generally, is just an encoding of an agent's event-free trajectory
+    typename T::Velocity; 
+    typename T::Time;  
 
-    { position + offset } -> std::convertible_to<decltype(position)>;
+    { position + offset } -> std::convertible_to<decltype(position)>; // this is only necessary if we assume a homogeneous space
 
     { position - position } -> std::convertible_to<decltype(offset)>;
 
@@ -39,17 +45,8 @@ concept SpaceTime = requires(T position, T offset, T::Scalar time, T::Velocity v
     // these, which is the one that should be defined in the spacetime.
     { offset / velocity } -> std::convertible_to<decltype(time)>;
 
-    // A position in spacetime that is in the future of all other positions (i.e. the spacetime position at which the universe ends).
-    { T::TOP } -> std::convertible_to<decltype(position)>;
-    // A position in spacetime that is in the past of all other positions (i.e. the spacetime position at which the universe starts).
-    { T::BOTTOM } -> std::convertible_to<decltype(position)>;
 };
 
-template<class T>
-concept IsSpatial = requires() {
-    typename T::SpaceTime;
-    requires SpaceTime<typename T::SpaceTime>;
-};
 
 template<class T>
 concept Executor = requires(T executor, std::function<void()> runnable) {
@@ -57,20 +54,19 @@ concept Executor = requires(T executor, std::function<void()> runnable) {
     { executor.join() }; 
 };
 
-// template<class T>
-// concept AgentEnvironment = requires(T::SpaceTime x, std::function<void()> runnable) {
-//     typename T::SpaceTime;
-//     requires SpaceTime<typename T::SpaceTime>;
 
-//     { T::submit(runnable) };
-//     { T::timeToIntersection(x,x) };
-// //    { T::laboratory } -> std::derived_from<AgentBase<typename T::SpaceTime>>;
+// template<class T, class AGENT>
+// concept ForceCarrier = requires(T forceCarrier, AGENT agent) {
+//     { forceCarrier.timeToIntersection(agent.position(), agent.velocity()) } -> std::convertible_to<typename T::Scalar>;
+//     { forceCarrier.execute(agent) };
 // };
 
-template<class T, class AGENT>
-concept ForceCarrier = requires(T forceCarrier, AGENT agent) {
-    { forceCarrier.timeToIntersection(agent.position(), agent.velocity()) } -> std::convertible_to<typename T::Scalar>;
-    { forceCarrier.execute(agent) };
+// Note that a differentiable field can exist on a discrete domain.
+template<class T, class SPACETIME>
+concept DifferentiableField = requires(T field, SPACETIME point, SPACETIME velocity) {
+    { field(point) };                   // value at point
+    { field.d_dt(point, velocity) };    // dF/dt along point + velocity*t
+    { field.d2_d2t(point, velocity) };   // d2F/dt2 along point + velocity*t
 };
 
 // A trajectory defines a map, T(s), from a fully ordered scalar, s, to points in a spacetime
@@ -91,26 +87,30 @@ concept ForceCarrier = requires(T forceCarrier, AGENT agent) {
 // ...or replace partition with a
 // probability-rate of interaction (per unit dot product) field, and timeToInteraction becomes a sample from a 
 // poisson process ]
-template<class T, class MANIFOLD>
-concept Trajectory = requires(T trajectory, MANIFOLD manifold, T::Scalar time) {
-    { trajectory.timeToIntersection(manifold) } -> std::convertible_to<typename T::Scalar>;
-    { trajectory.moveOriginTo(time) };
+template<class T>
+concept Trajectory = requires(T trajectory, T::SpaceTime point, T::Time time) {
+    typename T::SpaceTime;
+    requires SpaceTime<typename T::SpaceTime>;
+
+    typename T::Time;
+    { time < time } -> std::same_as<bool>;
+    { trajectory.timeToIntersection(point) } -> std::convertible_to<typename T::Time>;
+    { trajectory.advanceBy(time) };
+    { trajectory.jumpTo(point) };
     { trajectory.origin() } -> std::convertible_to<typename T::SpaceTime>;
 };
 
 
-// A field over a space is a function from points in the spacetime to some value
-// This can be used to define a partition by partitioning the space into positive
-// and non-positive regions of the field.
-// A metric is also a field.
-template<class T, class RANGE>
-concept Field = requires(T field, T::SpaceTime point, T::SpaceTime::Velocity velocity) {
-    // { manifold(point) } -> std::convertible_to<RANGE>;
+template<class T>
+concept Simulation = requires(T simulation, std::function<void()> runnable) {
+    typename T::Trajectory;
+    requires Trajectory<typename T::Trajectory>;
 
-    // Returns the smallest non-negative time such that field(point + velocity*time) > 0.
-    // or infinity if non existant. [does the field or the velocity know this best?!]
-    { field.timeToIntersection(point, velocity) } -> std::convertible_to<typename T::SpaceTime::Scalar>;
+    { T::submit(runnable) };
+    { T::boundary };            // A boundary defines a global lambda that all agents execute on intersection but don't absorb
+    // typename T::SpaceTime;
+
+    // typename T::Trajectory;
 };
-
 
 #endif

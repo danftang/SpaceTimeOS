@@ -12,7 +12,7 @@
 #include "ThreadPool.h"
 #include "ThreadSafeQueue.h"
 
-template<class T> class Agent;
+template<Simulation T> class Agent;
 template<class T> class Channel;
 template<class T> class RemoteReference;
 
@@ -67,9 +67,16 @@ public:
 
     // Could type-delete by making this into a std::function at construction (and separating position and function into two buffers)
     inline bool executeNext(Agent<ENV> &agent) const {
-        assert(buffer != nullptr);
+        if(buffer == nullptr) return false;
         if(buffer->empty()) return (buffer->source == nullptr);
         buffer->front()(agent); // do execution
+        buffer->pop();
+        return true;
+    }
+
+    inline bool discardNext() {
+        if(buffer == nullptr) return false;
+        if(buffer->empty()) return (buffer->source == nullptr);
         buffer->pop();
         return true;
     }
@@ -102,12 +109,12 @@ public:
         buffer->source->pushCallback(std::forward<LAMBDA>(lambda));
     }
 
-    Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
-        assert(buffer != nullptr);
-        return (empty() ?
-            (buffer->source != nullptr ? (buffer->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Scalar>::max())
-            : buffer->front().timeToIntersection(agentPosition, agentVelocity));
-    }
+    // Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
+    //     assert(buffer != nullptr);
+    //     return (empty() ?
+    //         (buffer->source != nullptr ? (buffer->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Scalar>::max())
+    //         : buffer->front().timeToIntersection(agentPosition, agentVelocity));
+    // }
 
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelExecutor<ENV> &in) {

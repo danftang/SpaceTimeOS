@@ -18,9 +18,11 @@ public:
 
     LabTimeBoundary(LAMBDA lambda) : lambda(lambda) { }
     
-    Scalar timeToIntersection(const SpaceTime &position, const SpaceTime &velocity) {
-        return (time - position[0])/velocity[0];
-    }
+    // Scalar timeToIntersection(const SpaceTime &position, const SpaceTime &velocity) {
+    //     return (time - position[0])/velocity[0];
+    // }
+
+    const Scalar &getTime() const { return time; }
 
     void setTime(Scalar newTime) {
         time = newTime;

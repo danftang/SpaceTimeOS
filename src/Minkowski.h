@@ -48,6 +48,13 @@ public:
     //     return deltat >=0 && sum < deltat*deltat; 
     // }
 
+    // The ordering of a Minkowski space is given by x < y if 
+    // y is inside the future light cone of x.
+    bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
+        Minkowski<DIMENSIONS,SCALAR> displacement = other - *this;
+        return displacement*displacement > 0 && displacement[0] > 0;
+    }
+
     Minkowski<DIMENSIONS,SCALAR> operator -(const Minkowski<DIMENSIONS,SCALAR> &other) const {
         Minkowski<DIMENSIONS,SCALAR> result;
         for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] - other[i];

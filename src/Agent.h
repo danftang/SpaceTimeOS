@@ -19,60 +19,35 @@
 //  - ensure position access is thread-safe
 //  - encapsulate pos/vel into a trajectory so that we don't need to speicalise the 1D case.
 // Base class for all agents without reference to the derived type of the agent.
-template<class ENV>
+template<Simulation ENV>
 class Agent : public CallbackQueue {
 public:
-    typedef ENV::SpaceTime              SpaceTime;
-    typedef ENV::SpaceTime::Scalar      Scalar;
-    typedef ENV                         Environment;
+    typedef ENV::SpaceTime  SpaceTime;
+    typedef ENV::Scalar     Scalar;
+    typedef ENV             Environment;
+    typedef ENV::Trajectory Trajectory;
 
-private:
-    SpaceTime               pos; // TODO: replace with TRAJECTORY template
-    SpaceTime::Velocity     vel;
-
-    std::vector<ChannelExecutor<ENV>>   inChannels;
-
-    friend ENV;
-
-public:
 
     Agent(const Agent<ENV> &other) = delete; // Just don't copy objects
     Agent(Agent<ENV> &&other) = delete;
 
-    // Construct with current active agent's position and velocity
-    Agent() : pos(ENV::activeAgent->position()), vel(ENV::activeAgent->velocity()) {
-        sendCallbackTo(*ENV::activeAgent);
+    // Construct with current active agent's trajectory
+    Agent() : trajectory(activeAgent->trajectory) {
+        sendCallbackTo(*activeAgent);
     }
-
-
-    Agent(const SpaceTime &position, const SpaceTime &velocity = ENV::activeAgent->velocity()) : pos(position), vel(velocity) {
-        // make velocity unit length
-        // velocity /= sqrt(velocity*velocity);
-        if(fabs(velocity*velocity - 1) > 1e-6)
-            throw(std::runtime_error("Can't construct an agent with velocity that isn't of unit length"));
-        if(velocity[0] < 0)
-            throw(std::runtime_error("Can't construct an agent with velocity that isn't future pointing in the laboratory frame"));
-        SpaceTime displacementFromParent = position - ENV::activeAgent->position();
-        if(displacementFromParent*displacementFromParent < 0)
-            throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
-        sendCallbackTo(*ENV::activeAgent);
-    }
-
 
     virtual ~Agent() {} // necessary to delete an agent without knowing the derived typw
 
-    const SpaceTime &position() const { return pos; }
-    const SpaceTime &velocity() const { return vel; }
-    SpaceTime &velocity() { return vel; }
+    const SpaceTime &position() const { return trajectory.origin(); }
 
-    void moveForward(Scalar time) { pos += vel * time; }
+//    void moveForward(Scalar time) { pos += vel * time; }
 
 
-    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
+//    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
 
     // Attaches a ChannelReader to this object.
     void attach(ChannelExecutor<ENV> &&inChan) {
-        if(inChan.timeToIntersection(this->position(),this->velocity()) < -REACTIONTIME) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
+        if(trajectory.timeToIntersection(inChan.position()) < 0) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
         inChannels.push_back(std::move(inChan));
     }
 
@@ -84,15 +59,27 @@ public:
 
     // Closes a given inChannel.
     // invalidates inChannels.back() and inChannels.end()
-    void detach(decltype(inChannels)::iterator channelIt) {
+    void detach(std::vector<ChannelExecutor<ENV>>::iterator channelIt) {
         if(&*channelIt != &inChannels.back()) *channelIt = std::move(inChannels.back());
         inChannels.pop_back();
-    }  
+    }
+
+    // Jumps to a given point (which must be in an agent's future light-cone)
+    // Once there, executes any lambdas that it now intersects, in order of
+    // increasing age of the channel, and increasing age of the lambda.
+    void jumpTo(const SpaceTime &newPosition) {
+        if(!(position() < newPosition)) throw(std::runtime_error("An agent can only jumpTo a positions that are in its future light-cone"));
+        trajectory.jumpTo(newPosition);
+        for(auto it = inChannels.rbegin(); it != inChannels.rend(); ++it) {
+            while(it->position() < newPosition) it->executeNext(*this);
+        }
+        execCallbacks();
+    }
 
 
     // Execute this objects lambdas until it blocks
     void step() {
-        ENV::activeAgent = this; // set this to the active agent so all lambdas know where they are.
+        activeAgent = this; // set this to the active agent so all lambdas know where they are.
         bool notBlocking = true;
         typename decltype(inChannels)::iterator earliestChanIt;
         do {
@@ -126,6 +113,22 @@ public:
     
 private:
 
+    std::vector<ChannelExecutor<ENV>>   inChannels;
+    ENV::Trajectory                     trajectory;
+
+
+    Agent(const Trajectory &trajectory) : trajectory(trajectory) {
+        // SpaceTime displacementFromParent = trajectory.origin() - ENV::activeAgent->position();
+        // if(!(ENV::activeAgent->position() < trajectory.origin()))
+        //     throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
+        // sendCallbackTo(*ENV::activeAgent);
+    }
+
+    static inline Agent<ENV>          initialisingAgent = Agent<ENV>(Trajectory(SpaceTime::BOTTOM));
+    static inline thread_local Agent<ENV> *activeAgent = &initialisingAgent; // each thread has an active agent on which it is currently running
+
+    friend ENV;
+
     template<class DESTINATION>
     void sendCallbackTo(DESTINATION &blockingAgent) {
         blockingAgent.pushCallback([me = this]() {
@@ -146,13 +149,13 @@ private:
         auto chanIt = inChannels.begin();
         auto end = inChannels.end();
         auto earliestChanIt = inChannels.end();
-        Scalar earliestIntersectionTime = ENV::boundary.timeToIntersection(this->position(),this->velocity());
+        Scalar earliestIntersectionTime = trajectory.timeToIntersection(ENV::boundary);
         while(chanIt != end) {
             if(chanIt->isClosed()) {
                 --end;
                 if(chanIt != end) *chanIt = std::move(*end);
             } else {
-                auto intersectTime = chanIt->timeToIntersection(this->position(),this->velocity()) + REACTIONTIME;
+                auto intersectTime = trajectory.timeToIntersection(chanIt->position());
                 if(intersectTime <= earliestIntersectionTime) {
                     earliestIntersectionTime = intersectTime;
                     earliestChanIt = chanIt;
@@ -160,7 +163,7 @@ private:
                 ++chanIt;
             }
         }
-        if(earliestIntersectionTime > 0) this->moveForward(earliestIntersectionTime);
+        if(earliestIntersectionTime > 0) trajectory.advanceBy(earliestIntersectionTime);
         if(earliestChanIt == inChannels.end()) {
             inChannels.erase(end, inChannels.end());
             earliestChanIt = inChannels.end(); // new end pointer
@@ -178,18 +181,15 @@ private:
 template<class CLASSTOWRAP, class ENV>
 class AgentWrapper : public Agent<ENV> {
 protected:
-    template<std::convertible_to<typename ENV::SpaceTime> P, std::convertible_to<typename ENV::SpaceTime> V, class... ARGS>
-    AgentWrapper(P &&position, V &&velocity, ARGS &&... args) : 
-        Agent<ENV>(std::forward<P>(position), std::forward<V>(velocity)),
-        object(std::forward<ARGS>(args)...) {};
+    // template<std::convertible_to<typename ENV::SpaceTime> P, std::convertible_to<typename ENV::SpaceTime> V, class... ARGS>
+    // AgentWrapper(P &&position, V &&velocity, ARGS &&... args) : 
+    //     Agent<ENV>(std::forward<P>(position), std::forward<V>(velocity)),
+    //     object(std::forward<ARGS>(args)...) {};
 
 public:
 
     template<class... ARGS>
-    AgentWrapper(const Agent<ENV> &parent, ARGS &&... args) : 
-        Agent<ENV>(parent),
-        object(std::forward<ARGS>(args)...) {};
-
+    AgentWrapper(ARGS &&... args) : object(std::forward<ARGS>(args)...) {};
 
     CLASSTOWRAP &operator ->() { return object; }
     const CLASSTOWRAP &operator ->() const { return object; }
@@ -207,9 +207,7 @@ template<class T, class ENV>
 class AgentMixin : public Agent<ENV>, T {
 public:
     template<std::convertible_to<typename ENV::SpaceTime> P, std::convertible_to<typename ENV::SpaceTime> V, class... ARGS>
-    AgentMixin(P &&position, V &&velocity, ARGS &&... args) : 
-        Agent<ENV>(std::forward<P>(position), std::forward<V>(velocity)),
-        T(std::forward<ARGS>(args)...) {};
+    AgentMixin(ARGS &&... args) : T(std::forward<ARGS>(args)...) {};
 };
 
 #endif
