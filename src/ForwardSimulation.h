@@ -11,32 +11,29 @@ auto deleteAgent = [](auto &agent) {
         delete(&agent);
      };
 
-template<SpaceTime SPACETIME, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<SPACETIME,decltype(deleteAgent)>>
+template<Trajectory TRAJECTORY, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<typename TRAJECTORY::SpaceTime,decltype(deleteAgent)>>
 class ForwardSimulation {
 public:
-    typedef SPACETIME                       SpaceTime;
-    typedef SPACETIME::Scalar               Scalar;
-    typedef ForwardSimulation<SPACETIME,EXECUTOR>  Simulation;
-protected:
+    typedef TRAJECTORY::SpaceTime   SpaceTime;
+    typedef SpaceTime::Scalar       Scalar;
+    typedef ForwardSimulation<TRAJECTORY,EXECUTOR,BOUNDARY>  Simulation;
+    typedef TRAJECTORY              Trajectory;
 
-    static inline EXECUTOR                      executor;
-
-public:
-    static inline Agent<Simulation>          initialisingAgent = Agent<Simulation>(SPACETIME::BOTTOM, SPACETIME(1));
     static inline BOUNDARY                      boundary;
-    static inline thread_local Agent<Simulation> *activeAgent = &initialisingAgent; // each thread has an active agent on which it is currently running
 
-    template<std::invocable T>
-    static void submit(T &&runnable) {
+    template<class T>
+    static inline void submit(T &&runnable) {
         executor.submit(std::forward<T>(runnable));
     }
 
 
     static void start(SpaceTime::Scalar endTime) {
         boundary.setTime(endTime);
-        initialisingAgent.execCallbacks();
+        Agent<Simulation>::initialisingAgent.execCallbacks();
         executor.join();
     }
+protected:
+    static inline EXECUTOR                      executor;
 };
 
 #endif
