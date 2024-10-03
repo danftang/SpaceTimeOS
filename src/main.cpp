@@ -31,12 +31,11 @@ public:
 
 int main() {
 
-
-
     // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
     Ping *alice = new Ping();
     Ping *bob   = new Ping();
 
+    // set up the agent's initial positions
     alice->jumpTo({0,0});
     bob->jumpTo({0,1});    
 
