@@ -18,12 +18,16 @@ concept SpaceTime = requires(T point) {
 
 // A vector spacetime 
 template<class T>
-concept VectorSpaceTime = SpaceTime<T> && requires(T position, T offset, T::Time time, T::Velocity velocity) {
+concept VectorSpaceTime = requires(T position, T offset, T::Time time, T::Velocity velocity) {
+    requires SpaceTime<T>;
+
     // Velocity is the type used to measure the change in spacetime position per unit local-time
     // so defines a trajectory through spacetime parameterised by time.
     // or more generally, is just an encoding of an agent's event-free trajectory
     typename T::Velocity; 
-    typename T::Time;  
+    typename T::Time;
+
+    { position.labTime() } -> std::convertible_to<typename T::Time>;
 
     { position + offset } -> std::convertible_to<decltype(position)>; // this is only necessary if we assume a homogeneous space
 
@@ -40,11 +44,27 @@ concept VectorSpaceTime = SpaceTime<T> && requires(T position, T offset, T::Time
     // Given velocity, v, and offset, x, should return the minimum time, t, such that
     // there exists a v' and t'>0 such that v * t = x + v' * t'
     // (i.e. defines when an agent with velocity v will first intersect a force carrier emitted at offset from its current position).
+    // [Note that this only makes sense when Velocity is a subset of spacetime points or a different type entirely, otherwise t is always 0
+    //  in this way, the Velocity type sneaks in the inner product (or at least a distance measure) by imposing |v.v| = 1]
     // This assumes the type of v is the same as that of v', but that need not be the case.
     // so we can imagine multiple velocity types...however, to constrain informaiton flow we need to specify the union of all
     // these, which is the one that should be defined in the spacetime.
-    { offset / velocity } -> std::convertible_to<decltype(time)>;
+//    { offset / velocity } -> std::convertible_to<decltype(time)>;
 
+};
+
+
+// An inner product space is a spacetime that has an inner product with the properties
+//   - (x+y).z = x.z + y.z
+//   - x.y = y.x
+//   - (v*t).x = t*(v.x) for any scalar t
+//   - 0.0 = 0 where the LHS 0s are the default constructed spacetime positions.
+// Note, we do not require x.y to be non-negative.
+template<class T>
+concept InnerProductSpace = requires(T point) {
+    requires VectorSpaceTime<T>;
+
+    { point * point } -> std::convertible_to<typename T::Time>;
 };
 
 
@@ -61,13 +81,27 @@ concept Executor = requires(T executor, std::function<void()> runnable) {
 //     { forceCarrier.execute(agent) };
 // };
 
+
 // Note that a differentiable field can exist on a discrete domain.
-template<class T, class SPACETIME>
-concept DifferentiableField = requires(T field, SPACETIME point, SPACETIME velocity) {
+template<class T>
+concept SecondOrderField = requires(T field, T::SpaceTime point, T::SpaceTime velocity) {
+    requires VectorSpaceTime<typename T::SpaceTime>;
+
     { field(point) };                   // value at point
-    { field.d_dt(point, velocity) };    // dF/dt along point + velocity*t
-    { field.d2_d2t(point, velocity) };   // d2F/dt2 along point + velocity*t
+    { field.d_dt(point, velocity) };    // dF/dt along x(t) = point + velocity*t at t=0
+    { field.d2_d2t(velocity) };         // d2F/dt2 along x(t) = point + velocity*t (should be independent of point and t)
 };
+
+// Note that a differentiable field can exist on a discrete domain.
+template<class T>
+concept FirstOrderField = requires(T field, T::SpaceTime point, T::SpaceTime velocity) {
+    requires VectorSpaceTime<typename T::SpaceTime>;
+
+    { field(point) };            // value at point
+    { field.d_dt(velocity) };    // dF/dt along x(t) = point + velocity*t (should be independent of point and t)
+};
+
+
 
 // A trajectory defines a map, T(s), from a fully ordered scalar, s, to points in a spacetime
 // such that T(s_2) > T(s_1) iff s_2 > s_1.
@@ -97,7 +131,7 @@ concept Trajectory = requires(T trajectory, T::SpaceTime point, T::Time time) {
     { trajectory.timeToIntersection(point) } -> std::convertible_to<typename T::Time>;
     { trajectory.advanceBy(time) };
     { trajectory.jumpTo(point) };
-    { trajectory.origin() } -> std::convertible_to<typename T::SpaceTime>;
+    { trajectory.position() } -> std::convertible_to<typename T::SpaceTime>; // position at current time
 };
 
 

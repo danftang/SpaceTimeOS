@@ -7,7 +7,7 @@ RELEASE_DIR = release
 DEBUG_DIR = debug
 
 # libraries to include (use -l<libraryname>) #-lnlopt -lm
-LIBS = -pthread
+LIBS = -pthread -latomic
 
 # name of the executable file to generate
 EXECUTABLE = a.out

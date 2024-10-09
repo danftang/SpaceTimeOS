@@ -40,7 +40,7 @@ template<class ENV>
 class ChannelExecutor {
 public:
     typedef ENV::SpaceTime SpaceTime;
-    typedef ENV::SpaceTime::Scalar Scalar;
+    typedef ENV::SpaceTime::Time Time;
 
     // User can't construct a ChannelBuffer so no need to hide this.
     ChannelExecutor(ChannelBuffer<ENV> *channel) : buffer(channel) { }
@@ -89,10 +89,10 @@ public:
 
     // position of the front of the queue, or source if empty
     // nullptr if closed and empty
-    const SpaceTime &position() const {
+    SpaceTime position() const {
         assert(buffer != nullptr);
         return (empty() ?
-            (buffer->source != nullptr ? buffer->source->position() : SpaceTime::TOP) 
+            (buffer->source != nullptr ? buffer->source->getPosition() : SpaceTime::TOP) 
             : buffer->front().position());
     }
 
@@ -102,17 +102,16 @@ public:
     // more calls on this channel.
     bool isClosed() const { return buffer->source == nullptr && empty(); }
 
-    template<std::invocable LAMBDA>
-    inline void pushCallback(LAMBDA &&lambda) {
+    inline void pushCallback(Agent<ENV> *agentToCallback) {
         assert(buffer != nullptr);
         assert(buffer->source != nullptr);
-        buffer->source->pushCallback(std::forward<LAMBDA>(lambda));
+        buffer->source->pushCallback(agentToCallback);
     }
 
     // Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
     //     assert(buffer != nullptr);
     //     return (empty() ?
-    //         (buffer->source != nullptr ? (buffer->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Scalar>::max())
+    //         (buffer->source != nullptr ? (buffer->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Time>::max())
     //         : buffer->front().timeToIntersection(agentPosition, agentVelocity));
     // }
 
@@ -195,7 +194,7 @@ public:
 
     template<std::convertible_to<std::function<void(T &)>> LAMBDA>
     bool send(LAMBDA &&function) const {
-        if(buffer == nullptr || buffer->source == nullptr) return false;
+        if(buffer == nullptr) return false;
         buffer->emplace(buffer->source->position(), 
             [f = std::forward<LAMBDA>(function)](Agent<Environment> &target) { 
                 f(static_cast<T &>(target)); 
@@ -211,7 +210,7 @@ public:
 
     const SpaceTime &sourcePosition() const {
         assert(buffer != nullptr);
-        return buffer->source->position();
+        return buffer->source->getPosition();
     }
 
 
@@ -242,7 +241,7 @@ public:
 
     // create a new channel to a local target
     RemoteReference(T &target) : 
-        outChannel(*new Agent<Environment>(target.position()), target) { } // If we have a raw reference to target it must be in same position
+        outChannel(*new Agent<Environment>(target.getPosition()), target) { } // If we have a raw reference to target it must be in same position
 
     RemoteReference(RemoteReference<T> &&other) : outChannel(std::move(other.outChannel)) { }
 

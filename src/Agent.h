@@ -6,24 +6,15 @@
 #include "Channel.h"
 
 
-// TODO: Abstract over trajectory, so it's a function from time to spacetime point and a timeToIntersection with a lambda.\
-// (or, perhaps point of intersection [the points should always have a frame-invariant ordering])
-// ...or, since an agent must have a position at an event, the trajectory defines an offset over time (v*t)
-//    so we're only abstracting over velocity:
-//      - velocity * time = offset
-//      - position + offset = position
-//      - offset / velocity = time
-
-
 // TODO:
 //  - ensure position access is thread-safe
 //  - encapsulate pos/vel into a trajectory so that we don't need to speicalise the 1D case.
 // Base class for all agents without reference to the derived type of the agent.
 template<Simulation ENV>
-class Agent : public CallbackQueue {
+class Agent : public CallbackQueue<ENV>, public ENV::Trajectory {
 public:
     typedef ENV::SpaceTime  SpaceTime;
-    typedef ENV::Scalar     Scalar;
+    typedef ENV::Time       Time;
     typedef ENV             Environment;
     typedef ENV::Trajectory Trajectory;
 
@@ -32,22 +23,16 @@ public:
     Agent(Agent<ENV> &&other) = delete;
 
     // Construct with current active agent's trajectory
-    Agent() : trajectory(activeAgent->trajectory) {
+    Agent() : Trajectory(*activeAgent) {
         sendCallbackTo(*activeAgent);
     }
 
     virtual ~Agent() {} // necessary to delete an agent without knowing the derived typw
 
-    const SpaceTime &position() const { return trajectory.origin(); }
-
-//    void moveForward(Scalar time) { pos += vel * time; }
-
-
-//    static constexpr Scalar REACTIONTIME = 1; // local time between absorbtion of a lambda and emission of resulting particles (should this be in SpatialFunction?).
 
     // Attaches a ChannelReader to this object.
     void attach(ChannelExecutor<ENV> &&inChan) {
-        if(trajectory.timeToIntersection(inChan.position()) < 0) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
+        if(this->timeToIntersection(inChan.position()) < 0) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
         inChannels.push_back(std::move(inChan));
     }
 
@@ -68,12 +53,11 @@ public:
     // Once there, executes any lambdas that it now intersects, in order of
     // increasing age of the channel, and increasing age of the lambda.
     void jumpTo(const SpaceTime &newPosition) {
-        if(!(position() < newPosition)) throw(std::runtime_error("An agent can only jumpTo a positions that are in its future light-cone"));
-        trajectory.jumpTo(newPosition);
+        Trajectory::jumpTo(newPosition);
         for(auto it = inChannels.rbegin(); it != inChannels.rend(); ++it) {
             while(it->position() < newPosition) it->executeNext(*this);
         }
-        execCallbacks();
+        this->execCallbacks();
     }
 
 
@@ -114,28 +98,23 @@ public:
 private:
 
     std::vector<ChannelExecutor<ENV>>   inChannels;
-    ENV::Trajectory                     trajectory;
 
+    static inline Agent<ENV>            boundaryAgent = Agent<ENV>(Trajectory(SpaceTime::BOTTOM));
+    static inline thread_local Agent<ENV> *activeAgent = &boundaryAgent; // each thread has an active agent on which it is currently running
 
-    Agent(const Trajectory &trajectory) : trajectory(trajectory) {
+    friend ENV;
+
+    Agent(const Trajectory &trajectory) : Trajectory(trajectory) {
         // SpaceTime displacementFromParent = trajectory.origin() - ENV::activeAgent->position();
         // if(!(ENV::activeAgent->position() < trajectory.origin()))
         //     throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
         // sendCallbackTo(*ENV::activeAgent);
     }
 
-    static inline Agent<ENV>          initialisingAgent = Agent<ENV>(Trajectory(SpaceTime::BOTTOM));
-    static inline thread_local Agent<ENV> *activeAgent = &initialisingAgent; // each thread has an active agent on which it is currently running
-
-    friend ENV;
 
     template<class DESTINATION>
     void sendCallbackTo(DESTINATION &blockingAgent) {
-        blockingAgent.pushCallback([me = this]() {
-                ENV::submit([me]() {
-                    me->step();
-                });
-        });
+        blockingAgent.pushCallback(this);
     }
 
 
@@ -149,13 +128,13 @@ private:
         auto chanIt = inChannels.begin();
         auto end = inChannels.end();
         auto earliestChanIt = inChannels.end();
-        Scalar earliestIntersectionTime = trajectory.timeToIntersection(ENV::boundary);
+        Time earliestIntersectionTime = this->timeToIntersection(ENV::boundary);
         while(chanIt != end) {
             if(chanIt->isClosed()) {
                 --end;
                 if(chanIt != end) *chanIt = std::move(*end);
             } else {
-                auto intersectTime = trajectory.timeToIntersection(chanIt->position());
+                auto intersectTime = this->timeToIntersection(chanIt->position());
                 if(intersectTime <= earliestIntersectionTime) {
                     earliestIntersectionTime = intersectTime;
                     earliestChanIt = chanIt;
@@ -163,7 +142,7 @@ private:
                 ++chanIt;
             }
         }
-        if(earliestIntersectionTime > 0) trajectory.advanceBy(earliestIntersectionTime);
+        if(earliestIntersectionTime > 0) this->advanceBy(earliestIntersectionTime);
         if(earliestChanIt == inChannels.end()) {
             inChannels.erase(end, inChannels.end());
             earliestChanIt = inChannels.end(); // new end pointer

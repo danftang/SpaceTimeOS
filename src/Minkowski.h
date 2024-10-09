@@ -14,7 +14,7 @@
 template<uint DIMENSIONS, class SCALAR = double>
 class Minkowski : public std::array<SCALAR,DIMENSIONS> {
 public:
-    typedef SCALAR                          Scalar;
+    typedef SCALAR                          Time;
     typedef Minkowski<DIMENSIONS,SCALAR>    Velocity;
     static constexpr uint Dimensions = DIMENSIONS;
 
@@ -38,22 +38,14 @@ public:
 
     static constexpr uint size() { return DIMENSIONS; }
 
-    // bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
-    //     SCALAR sum = 0;
-    //     for(int d=1; d<DIMENSIONS; ++d) {
-    //         SCALAR delta =  other[d] - (*this)[d];
-    //         sum += delta*delta;
-    //     }
-    //     SCALAR deltat = other[0] - (*this)[0];
-    //     return deltat >=0 && sum < deltat*deltat; 
-    // }
-
     // The ordering of a Minkowski space is given by x < y if 
     // y is inside the future light cone of x.
     bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
         Minkowski<DIMENSIONS,SCALAR> displacement = other - *this;
-        return displacement*displacement > 0 && displacement[0] > 0;
+        return displacement*displacement >= 0 && displacement[0] > 0;
     }
+
+    const Time &labTime() const { return (*this)[0]; }
 
     Minkowski<DIMENSIONS,SCALAR> operator -(const Minkowski<DIMENSIONS,SCALAR> &other) const {
         Minkowski<DIMENSIONS,SCALAR> result;
@@ -133,21 +125,21 @@ typedef Minkowski<1> GlobalTime; // 1-D Minkowski is the same as global time
 // V.Vt^2 - 2V.St + S.S = 0
 // N.B. if we assume |V| = 1 then V.V = 1
 // TODO: we can generalise this even further by solving |tV - S| = c. This corresponds to a channel that has a constant distance between emission and absorbtion
-template<uint DIM, class SCALAR>
-SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM,SCALAR> &velocity) {
-//    SCALAR a = velocity * velocity;
-    assert(fabs(velocity*velocity - 1) < 1e-6); // |v| should be 1
-    SCALAR mb = velocity * displacement; // -b/2
-    SCALAR c = displacement * displacement;
+// template<uint DIM, class SCALAR>
+// SCALAR operator /(const Minkowski<DIM,SCALAR> &displacement, const Minkowski<DIM,SCALAR> &velocity) {
+// //    SCALAR a = velocity * velocity;
+//     assert(fabs(velocity*velocity - 1) < 1e-6); // |v| should be 1
+//     SCALAR mb = velocity * displacement; // -b/2
+//     SCALAR c = displacement * displacement;
 
-    return mb + sqrt(mb*mb - c); // quadratic formula with a=1 second^2
-}
+//     return mb + sqrt(mb*mb - c); // quadratic formula with a=1 second^2
+// }
 
-template<class SCALAR>
-SCALAR operator /(const Minkowski<1,SCALAR> &displacement, const Minkowski<1,SCALAR> &velocity) {
-    assert(fabs(velocity*velocity - 1) < 1e-6); // |v| should be 1
-    return displacement[0]; // in 1D case, the square root of the quadratic identically goes to zero, so we don't need to calculate it 
-}
+// template<class SCALAR>
+// SCALAR operator /(const Minkowski<1,SCALAR> &displacement, const Minkowski<1,SCALAR> &velocity) {
+//     assert(fabs(velocity*velocity - 1) < 1e-6); // |v| should be 1
+//     return displacement[0]; // in 1D case, the square root of the quadratic identically goes to zero, so we don't need to calculate it 
+// }
 
 
 #endif

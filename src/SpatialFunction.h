@@ -10,7 +10,7 @@ class SpatialFunction : public std::function<void(T &)> {
 
 public:
     typedef T::SpaceTime SpaceTime;
-    typedef T::SpaceTime::Scalar Scalar;
+    typedef T::SpaceTime::Time Time;
     
     template<class LAMBDA>
     SpatialFunction(const SpaceTime &position, LAMBDA &&lambda) : 

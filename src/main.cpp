@@ -7,10 +7,12 @@
 #include "Agent.h"
 #include "LinearTrajectory.h"
 
+#include "TupleSpace.h"
+
 // First create a simulation type that defines the spacetime and the means of
 // executing events. Here we choose a 2 dimensional Minkowski spacetime
 // and a thread-pool consisting of 2 threads.
-typedef ForwardSimulation<LinearTrajectory<Minkowski<2>> , ThreadPool<2>>      MySimulation;
+typedef ForwardSimulation<LinearTrajectory<Minkowski<2>> , ThreadPool<0>>      MySimulation;
 
 // Now create a class derived from Agent to exist within the simulation.
 // This class just sends a ping to another agent.
@@ -29,6 +31,11 @@ public:
 };
 
 
+class MyClass {};
+class MyClass2 : public MyClass {
+    int x;
+};
+
 int main() {
 
     // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
@@ -37,7 +44,7 @@ int main() {
 
     // set up the agent's initial positions
     alice->jumpTo({0,0});
-    bob->jumpTo({0,1});    
+    bob->jumpTo({0,1});
 
     // now set the agent's member pointers to point to the other agent.
     alice->channelToOther = Channel(*alice, *bob);

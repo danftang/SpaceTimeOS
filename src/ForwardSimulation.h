@@ -15,7 +15,7 @@ template<Trajectory TRAJECTORY, Executor EXECUTOR = ThreadPool<0>, class BOUNDAR
 class ForwardSimulation {
 public:
     typedef TRAJECTORY::SpaceTime   SpaceTime;
-    typedef SpaceTime::Scalar       Scalar;
+    typedef SpaceTime::Time         Time;
     typedef ForwardSimulation<TRAJECTORY,EXECUTOR,BOUNDARY>  Simulation;
     typedef TRAJECTORY              Trajectory;
 
@@ -27,9 +27,9 @@ public:
     }
 
 
-    static void start(SpaceTime::Scalar endTime) {
+    static void start(Time endTime) {
         boundary.setTime(endTime);
-        Agent<Simulation>::initialisingAgent.execCallbacks();
+        Agent<Simulation>::boundaryAgent.execCallbacks();
         executor.join();
     }
 protected:

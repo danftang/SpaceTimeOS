@@ -6,26 +6,26 @@
 template<class SPACETIME, class LAMBDA>
 class LabTimeBoundary {
 public:
-    typedef SPACETIME           SpaceTime;
-    typedef SPACETIME::Scalar   Scalar;
+    typedef SPACETIME         SpaceTime;
+    typedef SPACETIME::Time   Time;
 
 protected:
-    Scalar          time = 0;   // laboratory time of this boundary
-    LAMBDA          lambda;
+    Time          boundaryTime = 0;   // laboratory time of this boundary
+    LAMBDA        lambda;
 public:
 
     LabTimeBoundary() = default;
 
     LabTimeBoundary(LAMBDA lambda) : lambda(lambda) { }
     
-    // Scalar timeToIntersection(const SpaceTime &position, const SpaceTime &velocity) {
-    //     return (time - position[0])/velocity[0];
-    // }
+    // Define a first order field that is zero along labTime = boundaryTime
+    Time operator ()(const SPACETIME &pos) const { return pos.labTime() - boundaryTime; }
+    Time d_dt(const SPACETIME &velocity) const { return velocity.labTime(); }
 
-    const Scalar &getTime() const { return time; }
+    const Time &getTime() const { return boundaryTime; }
 
-    void setTime(Scalar newTime) {
-        time = newTime;
+    void setTime(Time newTime) {
+        boundaryTime = newTime;
 //        this->callbacks.execAll();
     }
 
