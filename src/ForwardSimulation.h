@@ -6,12 +6,7 @@
 #include "Agent.h"
 #include "LabTimeBoundary.h"
 
-auto deleteAgent = [](auto &agent) { 
-        std::cout << "Agent on boundary, deleting " << &agent << std::endl;
-        delete(&agent);
-     };
-
-template<Trajectory TRAJECTORY, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<typename TRAJECTORY::SpaceTime,decltype(deleteAgent)>>
+template<Trajectory TRAJECTORY, Executor EXECUTOR = ThreadPool<0>, class BOUNDARY = LabTimeBoundary<typename TRAJECTORY::SpaceTime>>
 class ForwardSimulation {
 public:
     typedef TRAJECTORY::SpaceTime   SpaceTime;
@@ -29,7 +24,7 @@ public:
 
     static void start(Time endTime) {
         boundary.setTime(endTime);
-        Agent<Simulation>::boundaryAgent.execCallbacks();
+        Agent<Simulation>::start();
         executor.join();
     }
 protected:

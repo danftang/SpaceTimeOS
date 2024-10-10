@@ -2,7 +2,7 @@
 #define AGENT_H
 
 #include "Concepts.h"
-#include "CallbackQueue.h"
+#include "CallbackChannel.h"
 #include "Channel.h"
 
 
@@ -11,7 +11,7 @@
 //  - encapsulate pos/vel into a trajectory so that we don't need to speicalise the 1D case.
 // Base class for all agents without reference to the derived type of the agent.
 template<Simulation ENV>
-class Agent : public CallbackQueue<ENV>, public ENV::Trajectory {
+class Agent : public ENV::Trajectory {
 public:
     typedef ENV::SpaceTime  SpaceTime;
     typedef ENV::Time       Time;
@@ -19,16 +19,21 @@ public:
     typedef ENV::Trajectory Trajectory;
 
 
+
     Agent(const Agent<ENV> &other) = delete; // Just don't copy objects
     Agent(Agent<ENV> &&other) = delete;
 
     // Construct with current active agent's trajectory
     Agent() : Trajectory(*activeAgent) {
-        sendCallbackTo(*activeAgent);
+        // this will be called by activeAgent so no need to lock
+        activeAgent->callbackChannel.pushCallback(activeAgent->position(), this);
     }
 
-    virtual ~Agent() {} // necessary to delete an agent without knowing the derived typw
-
+    // needs to be virtual so we can delete an agent without knowing the derived type
+    virtual ~Agent() {
+        if(this == &boundaryAgent) callbackChannel.deleteCallbackAgents();
+        
+    } 
 
     // Attaches a ChannelReader to this object.
     void attach(ChannelExecutor<ENV> &&inChan) {
@@ -57,35 +62,17 @@ public:
         for(auto it = inChannels.rbegin(); it != inChannels.rend(); ++it) {
             while(it->position() < newPosition) it->executeNext(*this);
         }
-        this->execCallbacks();
     }
 
 
     // Execute this objects lambdas until it blocks
     void step() {
         activeAgent = this; // set this to the active agent so all lambdas know where they are.
-        bool notBlocking = true;
-        typename decltype(inChannels)::iterator earliestChanIt;
-        do {
-            earliestChanIt = moveToEarliestChannel();
-            if(earliestChanIt != inChannels.end()) {
-                notBlocking = earliestChanIt->executeNext(*this);
-            } else {
-                notBlocking = false;
-            }
-        } while(notBlocking);
-        this->execCallbacks();
-        if(earliestChanIt != inChannels.end()) {
-            sendCallbackTo(*earliestChanIt);
-        } else {
-            // no inChannels or hit end of simulation
-            if(inChannels.empty()) {
-                std::cout << "Out of inCahnnels, deleting " << this << std::endl;
-                delete(this); return; // no more inChannels
-            } else {
-                ENV::boundary.execute(*this); // hit the boundary
-                return; // paranoia
-            }
+        while(executeNextLambda()) { };
+        callbackChannel.updatePosition(this->position());
+        if(inChannels.empty()) {
+            std::cout << "Out of inCahnnels, deleting " << this << std::endl;
+            delete(this); return; // no more inChannels
         }
     }
 
@@ -94,12 +81,21 @@ public:
     // which will then delete this object.
     void die() { inChannels.clear(); }
 
-    
+
+    // Starts simulation of all agents in environment ENV by
+    // submitting callbacks of all agents on the boundaryAgent.
+    static void start() {
+        boundaryAgent.advanceBy(boundaryAgent.timeToIntersection(ENV::boundary));
+        boundaryAgent.callbackChannel.updatePosition(boundaryAgent.position());
+    }
+
+
+    CallbackChannel<ENV>                callbackChannel;
+    static inline Agent<ENV>            boundaryAgent = Agent<ENV>(Trajectory(SpaceTime::BOTTOM));
 private:
 
     std::vector<ChannelExecutor<ENV>>   inChannels;
 
-    static inline Agent<ENV>            boundaryAgent = Agent<ENV>(Trajectory(SpaceTime::BOTTOM));
     static inline thread_local Agent<ENV> *activeAgent = &boundaryAgent; // each thread has an active agent on which it is currently running
 
     friend ENV;
@@ -112,30 +108,28 @@ private:
     }
 
 
-    template<class DESTINATION>
-    void sendCallbackTo(DESTINATION &blockingAgent) {
-        blockingAgent.pushCallback(this);
-    }
-
-
     // Access the derived type
     // inline T &derived() { return *static_cast<T *>(this); }
 
     // finds the earliest channel and moves this to its intersection point,
     // detaching any closed channels as it goes.
     // If inChannels is empty, moves this to SpaceTime::TOP
-    auto moveToEarliestChannel() {
+    bool executeNextLambda() {
+        bool didExecution;
         auto chanIt = inChannels.begin();
         auto end = inChannels.end();
         auto earliestChanIt = inChannels.end();
+        SpaceTime earliestChanPos;
         Time earliestIntersectionTime = this->timeToIntersection(ENV::boundary);
         while(chanIt != end) {
-            if(chanIt->isClosed()) {
-                --end;
+            if(chanIt->isClosed()) { 
+                --end; // mark closed channels for deletion without invalidating the end() iterator
                 if(chanIt != end) *chanIt = std::move(*end);
             } else {
-                auto intersectTime = this->timeToIntersection(chanIt->position());
+                SpaceTime chanPosition = chanIt->position();
+                auto intersectTime = this->timeToIntersection(chanPosition);
                 if(intersectTime <= earliestIntersectionTime) {
+                    earliestChanPos = chanPosition;
                     earliestIntersectionTime = intersectTime;
                     earliestChanIt = chanIt;
                 }
@@ -144,12 +138,15 @@ private:
         }
         if(earliestIntersectionTime > 0) this->advanceBy(earliestIntersectionTime);
         if(earliestChanIt == inChannels.end()) {
-            inChannels.erase(end, inChannels.end());
-            earliestChanIt = inChannels.end(); // new end pointer
+            // earliest channel is boundary
+            didExecution = false;
+            boundaryAgent.callbackChannel.pushCallback(boundaryAgent.position(), this);
         } else {
-            inChannels.erase(end, inChannels.end());
+            didExecution = earliestChanIt->executeNext(*this);
+            if(!didExecution) earliestChanIt->pushCallback(earliestChanPos, this);
         }
-        return earliestChanIt;
+        inChannels.erase(end, inChannels.end()); // delete closed channels
+        return didExecution;
     }
 };
 

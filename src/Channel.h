@@ -11,8 +11,8 @@
 #include "SpatialFunction.h"
 #include "ThreadPool.h"
 #include "ThreadSafeQueue.h"
+#include "CallbackChannel.h"
 
-template<Simulation T> class Agent;
 template<class T> class Channel;
 template<class T> class RemoteReference;
 
@@ -21,12 +21,12 @@ class ChannelBuffer : public ThreadSafeQueue<SpatialFunction<Agent<ENV>>> {
 public:
     typedef typename ENV::SpaceTime SpaceTime;
 protected:
-    ChannelBuffer(Agent<ENV> &source) : source(&source) { }
+    ChannelBuffer(Agent<ENV> &source) : source(&source.callbackChannel) { }
 
     template<class T> requires std::same_as<typename T::Envoronment, ENV> friend class Channel; // only Channel can construct a new channel.
 public:
 
-    Agent<ENV> *              source = nullptr; // null if closed on either end
+    CallbackChannel<ENV> *              source = nullptr; // null if closed on either end
 
     ChannelBuffer(const ChannelBuffer<ENV> &other) = delete; // just don't copy channels
     ChannelBuffer(ChannelBuffer<ENV> &&) = delete; // just don't copy channels
@@ -92,7 +92,7 @@ public:
     SpaceTime position() const {
         assert(buffer != nullptr);
         return (empty() ?
-            (buffer->source != nullptr ? buffer->source->getPosition() : SpaceTime::TOP) 
+            (buffer->source != nullptr ? buffer->source->position() : SpaceTime::TOP) 
             : buffer->front().position());
     }
 
@@ -102,10 +102,10 @@ public:
     // more calls on this channel.
     bool isClosed() const { return buffer->source == nullptr && empty(); }
 
-    inline void pushCallback(Agent<ENV> *agentToCallback) {
+    inline void pushCallback(const SpaceTime &sourcePosition, Agent<ENV> *agentToCallback) {
         assert(buffer != nullptr);
         assert(buffer->source != nullptr);
-        buffer->source->pushCallback(agentToCallback);
+        buffer->source->pushCallback(sourcePosition, agentToCallback);
     }
 
     // Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {

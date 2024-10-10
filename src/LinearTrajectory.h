@@ -4,20 +4,21 @@
 #include <limits>
 #include <concepts>
 #include <atomic>
+#include <string>
 
 #include "LabTimeBoundary.h"
 #include "numerics.h"
 #include "ThreadSafePosition.h"
 
 template<class SPACETIME>
-class LinearTrajectory : public ThreadSafePosition<SPACETIME> {
+class LinearTrajectory {
 public:
     typedef SPACETIME             SpaceTime;
     typedef SPACETIME::Time       Time;
     typedef SPACETIME::Velocity   Velocity;
 
 
-    LinearTrajectory(SpaceTime startPosition, Velocity velocity = Velocity(1)) : ThreadSafePosition<SPACETIME>(std::move(startPosition)), vel(std::move(velocity)) { 
+    LinearTrajectory(SpaceTime startPosition, Velocity velocity = Velocity(1)) : pos(std::move(startPosition)), vel(std::move(velocity)) { 
         // TODO: absorb this into velocity type
         if(fabs(velocity*velocity - 1) > 1e-6)
             throw(std::runtime_error("Can't construct a LinearTrajectory with velocity that isn't of unit length"));
@@ -87,61 +88,69 @@ public:
     
 
     void advanceBy(Time time) {
-        this->setPosition(this->position() + vel*time);
+        pos += vel*time;
     }
 
 
     const Velocity & velocity() const { return vel; }
     Velocity & velocity() { return vel; }
 
-    // 
-    void setVelocity(Velocity v) { vel.store(std::move(v)); }
+    const SPACETIME &position() const { return pos; }
+
+    // tjread-safe position write with validity check for agent
+    inline void jumpTo(const SPACETIME &position) {
+        if(!(pos < position)) {
+            throw(std::runtime_error("An agent can only jumpTo a positions that are in its future light-cone."));
+        }
+        pos = position;
+    }
 
 
 protected:
-    Velocity     vel;
+    SpaceTime   pos;
+    Velocity    vel;
 };
 
 
 // Specialization for 1-dimensional case, where SpaceTime is Time
-template<class SPACETIME> requires (SPACETIME::DIMENSIONS == 1)
-class LinearTrajectory<SPACETIME>  : public ThreadSafePosition<SPACETIME> {
-    typedef SPACETIME             SpaceTime;
-    typedef SPACETIME::Time       Time;
+// template<class SPACETIME> requires (SPACETIME::DIMENSIONS == 1)
+// class LinearTrajectory<SPACETIME>  : public ThreadSafePosition<SPACETIME> {
+//     typedef SPACETIME             SpaceTime;
+//     typedef SPACETIME::Time       Time;
 
-    LinearTrajectory(SpaceTime startPosition) : ThreadSafePosition<SPACETIME>(std::move(startPosition)) { }
+//     LinearTrajectory(SpaceTime startPosition) : ThreadSafePosition<SPACETIME>(std::move(startPosition)) { }
 
-    // Calculates time to intersection with the inner product field (x.x)
-    // timeToIntersection is defined as the largest t such that F = (tV - S).(tV - S) = 0.
-    // where S = emissionPoint - agentPosition
-    //
-    // i.e. if V is a velocity and S is a displacement, timeToIntersection is the
-    // time it would take in a reference frame moving with V to reach zero
-    // distance to S, starting at the origin.
-    // If V.S = S.V and (A + B).C =  A.C + B.C then this equivalent to the largest solution of
-    // V.Vt^2 - 2V.St + S.S > 0
-    // We assume V.V = 1 so 
-    // t^2 - 2V.St + S.S > 0
-    // TODO: we can generalise this even further by solving |tV - S| = c. This corresponds to a channel that has a constant distance between emission and absorbtion
-    Time timeToIntersection(const SpaceTime &emissionPoint) const {
-        SpaceTime displacement = emissionPoint - this->position();
-        displacement += SpaceTime(delta(displacement.labTime())); // ensure intersection is strictly in the future of emission point
-        return displacement; // quadratic formula with a=1 second^2
-    }
+//     // Calculates time to intersection with the inner product field (x.x)
+//     // timeToIntersection is defined as the largest t such that F = (tV - S).(tV - S) = 0.
+//     // where S = emissionPoint - agentPosition
+//     //
+//     // i.e. if V is a velocity and S is a displacement, timeToIntersection is the
+//     // time it would take in a reference frame moving with V to reach zero
+//     // distance to S, starting at the origin.
+//     // If V.S = S.V and (A + B).C =  A.C + B.C then this equivalent to the largest solution of
+//     // V.Vt^2 - 2V.St + S.S > 0
+//     // We assume V.V = 1 so 
+//     // t^2 - 2V.St + S.S > 0
+//     // TODO: we can generalise this even further by solving |tV - S| = c. This corresponds to a channel that has a constant distance between emission and absorbtion
+//     Time timeToIntersection(const SpaceTime &emissionPoint) const {
+//         SpaceTime displacement = emissionPoint - this->position();
+//         displacement += SpaceTime(delta(displacement.labTime())); // ensure intersection is strictly in the future of emission point
+//         return displacement; // quadratic formula with a=1 second^2
+//     }
 
-    // Intersection point of a field is the first point on the trajectory that the field is non negative
-    template<FirstOrderField F>
-    Time timeToIntersection(const F &field) const {
-        if constexpr(std::floating_point<Time>) {
-            return -field(this->position())/field.d_dt(1);
-        }
-        return ceil(-field(this->position())/field.d_dt(1));
-    }
+//     // Intersection point of a field is the first point on the trajectory that the field is non negative
+//     template<FirstOrderField F>
+//     Time timeToIntersection(const F &field) const {
+//         if constexpr(std::floating_point<Time>) {
+//             return -field(this->position())/field.d_dt(1);
+//         }
+//         return ceil(-field(this->position())/field.d_dt(1));
+//     }
     
 
-    void advanceBy(Time time) {
-        this->setPosition(this->position() + time); // channel locks ensure this doesn't commute with previous lambda emissions
-    }
-};
+//     void advanceBy(Time time) {
+//         this->setPosition(this->position() + time); // channel locks ensure this doesn't commute with previous lambda emissions
+//     }
+// };
 
 #endif
