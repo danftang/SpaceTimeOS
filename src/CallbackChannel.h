@@ -100,8 +100,9 @@ public:
 
     void pushCallback(const SpaceTime &callbackOnMoveFromPosition, Agent<ENV> *agentToCallback) {
         bool executeNow = false;
+        Time callbackTime = static_cast<Time>(callbackOnMoveFromPosition);
         mutex.lock();
-            if(callbackOnMoveFromPosition.labTime() < pos.labTime()) executeNow = true; else pBuffer->push_back(agentToCallback);
+            if(callbackTime < static_cast<Time>(pos)) executeNow = true; else pBuffer->push_back(agentToCallback);
         mutex.unlock();
         if(executeNow) execCallback(agentToCallback);
     }
@@ -119,7 +120,7 @@ protected:
     }
 
     inline void execCallback(Agent<ENV> *agent) {
-        ENV::submit([agent]() {
+        ENV::executor.submit([agent]() {
             agent->step();
         });
     }

@@ -6,10 +6,37 @@
 #include "Channel.h"
 
 
-// TODO:
-//  - ensure position access is thread-safe
-//  - encapsulate pos/vel into a trajectory so that we don't need to speicalise the 1D case.
-// Base class for all agents without reference to the derived type of the agent.
+// An Agent is not much more than a vector field with registered writers
+// which is expressible as the sum of (exponential) functions from a parameterised 
+// family of functions, where the parameter is position in the field.
+// Each writer has a presence in the field which is in the family,
+// and whose position may change.
+//
+// At its most basic, a field gives a value, gradient and 2nd order gradient
+// matrix for any point.
+// Ultimately we want to turn a trajectory to a time/position of intersection and
+// a lambda which is intersected.
+//
+// The field would be a good place to define the blocking field/lambda fields
+// If we assume the field type itself defines the velocity ordering
+// and that the lambda field has a space-like tangent linear model at
+// all points on its zero surface, then the lambda field is its own
+// blocking field.
+// 
+// ...and a good distinction between the field and the points of a field.
+//
+// A derived agent is both a field reader and writer, and may write
+// to many fields.
+//
+// If velocity is constant (or the field is 1-Dimensional) then
+// the trajectory is fixed and imposes a complete order on the field and
+// so we can pull events out of the channels and put them into a
+// queue.
+//
+ 
+//
+// Base class for all agents
+// 
 template<Simulation ENV>
 class Agent : public ENV::Trajectory {
 public:
@@ -76,6 +103,7 @@ public:
         }
     }
 
+
     // Kills this agent by deleting all inChannels.
     // This will signal the end of the current step
     // which will then delete this object.
@@ -108,9 +136,6 @@ private:
     }
 
 
-    // Access the derived type
-    // inline T &derived() { return *static_cast<T *>(this); }
-
     // finds the earliest channel and moves this to its intersection point,
     // detaching any closed channels as it goes.
     // If inChannels is empty, moves this to SpaceTime::TOP
@@ -127,7 +152,7 @@ private:
                 if(chanIt != end) *chanIt = std::move(*end);
             } else {
                 SpaceTime chanPosition = chanIt->position();
-                auto intersectTime = this->timeToIntersection(chanPosition);
+                Time intersectTime = this->timeToIntersection(chanPosition);
                 if(intersectTime <= earliestIntersectionTime) {
                     earliestChanPos = chanPosition;
                     earliestIntersectionTime = intersectTime;

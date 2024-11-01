@@ -15,8 +15,8 @@ public:
 
 
     // Define a first order field that is zero along labTime = boundaryTime
-    Time operator ()(const SPACETIME &pos) const { return pos.labTime() - boundaryTime; }
-    Time d_dt(const SPACETIME &velocity) const { return velocity.labTime(); }
+    Time operator ()(const SPACETIME &pos) const { return static_cast<Time>(pos) - boundaryTime; }
+    Time d_dt(const SPACETIME &velocity) const { return static_cast<Time>(velocity); }
 
     const Time &getTime() const { return boundaryTime; }
 

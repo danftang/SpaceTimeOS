@@ -9,20 +9,34 @@
 #include "LabTimeBoundary.h"
 #include "numerics.h"
 #include "ThreadSafePosition.h"
+#include "predeclarations.h"
+#include "Concepts.h"
+#include "Velocity.h"
 
-template<class SPACETIME>
-class LinearTrajectory {
+// 
+
+
+/// @brief A LinearTrajectory describes a trajectory on a vector space 
+/// that is of the form x(t) = x_0 + vt
+/// where t is the scalar of the field.
+///
+/// @tparam BLOCKINGFIELD defines the field that other agents must block on
+/// if they have an incoming connection from an agent on this trajecctory.
+/// The blockingfield should be constructible from a position
+/// @tparam METRICFIELD defines the velocity that
+template<DifferentiableField BLOCKINGFIELD, StaticDifferentiableField METRICFIELD>
+class LinearTrajectory  {
 public:
-    typedef SPACETIME             SpaceTime;
-    typedef SPACETIME::Time       Time;
-    typedef SPACETIME::Velocity   Velocity;
+    typedef METRICFIELD::SpaceTime          SpaceTime;
+    typedef METRICFIELD::SpaceTime::Time    Time;
+//    typedef ENV::Velocity           Velocity; // Velocity should be a velocity of the metric
 
 
-    LinearTrajectory(SpaceTime startPosition, Velocity velocity = Velocity(1)) : pos(std::move(startPosition)), vel(std::move(velocity)) { 
+    LinearTrajectory(SpaceTime startPosition, Velocity<METRICFIELD> velocity = Velocity<METRICFIELD>()) : blockingField(std::move(startPosition)), vel(std::move(velocity)) { 
         // TODO: absorb this into velocity type
         if(fabs(velocity*velocity - 1) > 1e-6)
             throw(std::runtime_error("Can't construct a LinearTrajectory with velocity that isn't of unit length"));
-        if(velocity.labTime() < 0)
+        if(static_cast<Time>(velocity) < 0)
             throw(std::runtime_error("Can't construct a LinearTrajectory with velocity that isn't future pointing in the laboratory frame"));
         // SpaceTime displacementFromParent = position - ENV::activeAgent->position();
         // if(displacementFromParent*displacementFromParent < 0)
@@ -42,73 +56,85 @@ public:
     // We assume V.V = 1 so 
     // t^2 - 2V.St + S.S > 0
     // TODO: we can generalise this even further by solving |tV - S| = c. This corresponds to a channel that has a constant distance between emission and absorbtion
-    Time timeToIntersection(const SpaceTime &emissionPoint) const {
-        assert(fabs(vel*vel - 1.0) < 1e-8);
-        SpaceTime displacement = emissionPoint - this->position();
-        displacement += SpaceTime(delta(displacement.labTime())); // ensure intersection is strictly in the future of emission point
-        Time mb = vel * displacement; // -b/2
-        Time c = displacement * displacement;
-        Time sq = mb*mb - c;
-//        if constexpr(std::floating_point<Time>) sq += delta(sq); // ensure we don't round into negative
-        if(sq < 0) return std::numeric_limits<Time>::max(); // never intersects
+//     Time timeToIntersection(const SpaceTime &emissionPoint) const {
+//         assert(fabs(vel*vel - 1.0) < 1e-8);
+//         SpaceTime displacement = emissionPoint - position();
+//         displacement += SpaceTime(delta(static_cast<Time>(displacement))); // ensure intersection is strictly in the future of emission point
+//         Time mb = vel * displacement; // -b/2
+//         Time c = displacement * displacement;
+//         Time sq = mb*mb - c;
+// //        if constexpr(std::floating_point<Time>) sq += delta(sq); // ensure we don't round into negative
+//         if(sq < 0) return std::numeric_limits<Time>::max(); // never intersects
 
-        Time t = mb + sqrt(sq);
+//         Time t = mb + sqrt(sq);
 
-        // if(pos.labTime() + t*vel.labTime() <= emissionPoint.labTime()) { // ensure strictly increasing intersection by requiring lab-time strictly increases
-        //     t = (emissionPoint.labTime() - pos.labTime()) / vel.labTime();
-        //     t += delta(t);
-        // }
-
-        return std::move(t); // quadratic formula with a=1 second^2
-    }
+//         return std::move(t); // quadratic formula with a=1 second^2
+//     }
 
 
     // Intersection point of a field is the first point on the trajectory that the field is non negative
     template<FirstOrderField F>
     Time timeToIntersection(const F &field) const {
-        if constexpr(std::floating_point<Time>) {
-            return -field(this->position())/field.d_dt(vel);
-        }
-        return ceil(-field(this->position())/field.d_dt(vel));
+        return -field(position())/field.d_dt(vel); // should be valid integer division when time is integer
     }
+
 
 
     template<SecondOrderField F>
     Time timeToIntersection(const F &field) const {
         auto a = field.d2_dt2(vel);
-        auto mb = -field.d_dt(this->position(),vel)/2;
-        auto sq = mb*mb - a*field(this->position());
+        auto mb = -field.d_dt(position(),vel)/2;
+        auto sq = mb*mb - a*field(position());
         if constexpr(std::floating_point<Time>) sq += delta(sq); // ensure we don't round into negative
         if(sq < 0) return std::numeric_limits<Time>::max(); // never intersects
 
-        Time t = (mb + sqrt(sq))/a;
-
-        return std::move(t); // quadratic formula with a=1 second^2
+        return (mb + sqrt(sq))/a;
     }
-    
+
+
+    // The above should optimize to these anyway...
+    // Specializations for fields that are based on the metric for which our velocity is defined
+    // template<Time Offset> requires StaticFirstOrderField<METRICFIELD>
+    // Time timeToIntersection(const HomogeneousField<METRICFIELD, Offset> &field) const {
+    //     return -field(position()); 
+    // }
+
+    // template<Time Offset> requires StaticSecondOrderField<METRICFIELD>
+    // Time timeToIntersection(const HonogeneousField<METRICFIELD, Offset> &field) const {
+    //     auto mb = -field.d_dt(position(),vel)/2;
+    //     auto sq = mb*mb - field(position());
+    //     if constexpr(std::floating_point<Time>) sq += delta(sq); // ensure we don't round into negative
+    //     if(sq < 0) return std::numeric_limits<Time>::max(); // never intersects
+
+    //     return mb + sqrt(sq); // quadratic formula with a=1 second^2
+    // }
+
 
     void advanceBy(Time time) {
-        pos += vel*time;
+        blockingField.origin += vel*time;
     }
 
 
     const Velocity & velocity() const { return vel; }
     Velocity & velocity() { return vel; }
 
-    const SPACETIME &position() const { return pos; }
+    const SpaceTime &position() const { return blockingField.origin; }
 
     // tjread-safe position write with validity check for agent
-    inline void jumpTo(const SPACETIME &position) {
-        if(!(pos < position)) {
+    inline void jumpTo(const VECTORSPACE &newPosition) {
+        if(!(position() < newPosition)) {
             throw(std::runtime_error("An agent can only jumpTo a positions that are in its future light-cone."));
         }
-        pos = position;
+        blockingField.origin = newPosition;
     }
+
+    // The blocking field associated with the current position
+    const HomogeneousField<BLOCKINGFIELD> asField() { return blockingField; }
 
 
 protected:
-    SpaceTime   pos;
-    Velocity    vel;
+    BLOCKINGFIELD blockingField; // stores the current position as its origin
+    Velocity<METRICFIELD>    vel;
 };
 
 

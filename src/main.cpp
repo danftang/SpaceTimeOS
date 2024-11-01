@@ -8,11 +8,17 @@
 #include "LinearTrajectory.h"
 
 #include "TupleSpace.h"
+#include "MinkowskiField.h"
 
 // First create a simulation type that defines the spacetime and the means of
 // executing events. Here we choose a 2 dimensional Minkowski spacetime
 // and a thread-pool consisting of 2 threads.
-typedef ForwardSimulation<LinearTrajectory<Minkowski<2>> , ThreadPool<0>>      MySimulation;
+typedef ForwardSimulation<
+    LinearTrajectory<TupleSpace<double,double>>,
+    MinkowskiField<1.0,double,double>,
+    MinkowskiField<0.0,double,double>,
+    MinkowskiField<1.0,double,double>,
+    ThreadPool<0>>      MySimulation;
 
 // Now create a class derived from Agent to exist within the simulation.
 // This class just sends a ping to another agent.
@@ -38,23 +44,33 @@ class MyClass2 : public MyClass {
 
 int main() {
 
-    // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
-    Ping *alice = new Ping();
-    Ping *bob   = new Ping();
 
-    // set up the agent's initial positions
-    alice->jumpTo({0,0});
-    bob->jumpTo({0,1});
 
-    // now set the agent's member pointers to point to the other agent.
-    alice->channelToOther = Channel(*alice, *bob);
-    bob->channelToOther   = Channel(*bob, *alice);
+    TupleSpace<double,double> mySpace;
 
-    // Initialize the ping-pong by calling ping()
-    alice->ping();
+    MinkowskiField<1.0,double,double>::operator()(mySpace);
 
-    //Now start the simulation and set a the end of the simulation to be at time 100 in the laboroatory frame
-    MySimulation::start(100);
+    MinkowskiField<1.0,double,double>::d_dt(mySpace,mySpace);
+    MinkowskiField<1.0,double,double>::d2_dt2(mySpace);
+
+
+    // // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
+    // Ping *alice = new Ping();
+    // Ping *bob   = new Ping();
+
+    // // set up the agent's initial positions
+    // alice->jumpTo({0,0});
+    // bob->jumpTo({0,1});
+
+    // // now set the agent's member pointers to point to the other agent.
+    // alice->channelToOther = Channel(*alice, *bob);
+    // bob->channelToOther   = Channel(*bob, *alice);
+
+    // // Initialize the ping-pong by calling ping()
+    // alice->ping();
+
+    // //Now start the simulation and set a the end of the simulation to be at time 100 in the laboroatory frame
+    // MySimulation::start(100);
 
     return 0;
 }

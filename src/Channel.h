@@ -12,12 +12,10 @@
 #include "ThreadPool.h"
 #include "ThreadSafeQueue.h"
 #include "CallbackChannel.h"
-
-template<class T> class Channel;
-template<class T> class RemoteReference;
+#include "predeclarations.h"
 
 template<class ENV> 
-class ChannelBuffer : public ThreadSafeQueue<SpatialFunction<Agent<ENV>>> {
+class ChannelBuffer : public ThreadSafeQueue<SpatialFunction<ENV>> {
 public:
     typedef typename ENV::SpaceTime SpaceTime;
 protected:
@@ -114,6 +112,16 @@ public:
     //         (buffer->source != nullptr ? (buffer->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Time>::max())
     //         : buffer->front().timeToIntersection(agentPosition, agentVelocity));
     // }
+
+    // Channel is a field [but what kind of field!?]...
+
+    template<class TRAJECTORY>
+    Time timeToIntersection(const TRAJECTORY &trajectory) {
+        assert(buffer != nullptr);
+        return empty()?
+            (buffer->source != nullptr ? trajectory.timeToIntersection(buffer->source->asField()) : std::numeric_limits<Time>::max())
+            : trajectory.timeToIntersection(buffer.front().asField());
+    }
 
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelExecutor<ENV> &in) {

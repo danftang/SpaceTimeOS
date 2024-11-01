@@ -14,8 +14,9 @@
 template<uint DIMENSIONS, class SCALAR = double>
 class Minkowski : public std::array<SCALAR,DIMENSIONS> {
 public:
-    typedef SCALAR                          Time;
+    typedef Minkowski<DIMENSIONS,SCALAR>    Position;
     typedef Minkowski<DIMENSIONS,SCALAR>    Velocity;
+    typedef SCALAR                          Time;
     static constexpr uint Dimensions = DIMENSIONS;
 
     // Default gives the reference origin 
@@ -45,7 +46,7 @@ public:
         return displacement*displacement >= 0 && displacement[0] > 0;
     }
 
-    const Time &labTime() const { return (*this)[0]; }
+    explicit operator Time() const { return (*this)[0]; }
 
     Minkowski<DIMENSIONS,SCALAR> operator -(const Minkowski<DIMENSIONS,SCALAR> &other) const {
         Minkowski<DIMENSIONS,SCALAR> result;
