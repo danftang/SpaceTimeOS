@@ -18,12 +18,13 @@
 // trajectory need not be separated by distance 1.
 // A Velocity of an integer spacetime states we are restricting ourselves to
 // unit velocities within the integer vector space.
+// The special case of 1D integer spacetime allows the default velocity of 1.
 //
 // Mixed integer spacetimes:
-// If the spacetime is mixed floating point/integer, then we have we have two possibilities:
+// If the spacetime is mixed floating point/integer, then we have two possibilities:
 // if local time is integer, then trajectories consist of discrete points separated by distance 1.
 // If local time is floating-point and the velocity has non-zero integer components, then
-// then the trajectory should follow the projection of the real trajectory to its integer rounding
+// the trajectory should follow the projection of the real trajectory to its integer rounding
 // with jumps at light speed between integer points, centred about the point
 // where the real trajectory would switch the integer point it would round to.
 // In this way, we respect locality while maintining a fully defined * operator on the
@@ -33,18 +34,19 @@
 // is the 4-momentum (energy-momentum) of the agent. If we require that in an interaction
 // the total 4-momentum is conserved, and that the rest-mass of the agents is not
 // changed (i.e. no nuclear reactions between agents) then we have, in 2D for example...
-//
-
+// [alternatively, we can perform rotations/boosts of velocities to get other velocities]
 //
 template<SpaceTime SPACETIME>
 class Velocity : public SPACETIME {
 public:
-    Velocity() : typename SPACETIME(1) { }
+    Velocity() : SPACETIME(1) { }
 
     // We can map all points in spacetime onto the velocity manifold by projecting
     // along lab-energy (lab-time) until we reach unit inner product. If time is
     // integer, there may be more than one value that along this projection that has
     // unit inner product, in which case we take the earliest.
+
+    // TODO: Add Lorenz-rotation of velocities
     
 
 };

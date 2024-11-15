@@ -100,7 +100,7 @@ concept SpaceTime = requires(T position, T offset, T velocity, T::Time time) {
     // trajectory, or distances along a trajectory.
     typename T::Time;
 
-    { static_cast<typename T::Time>(position) }; // should return lab time i.e. L.X for some reference point L.
+//    { static_cast<typename T::Time>(position) }; // should return lab time i.e. L.X for some reference point L.
 
     { position + offset } -> std::convertible_to<decltype(position)>; // this is only necessary if we assume a homogeneous space
 
@@ -167,7 +167,7 @@ template<class T>
 concept SecondOrderField = requires(T field, T::SpaceTime x, T::SpaceTime v) {
     requires Field<T>;
     { field.d_dt(x, v) };       // dF(x+vt)/dt at t=0
-    { field.d2_d2t(v) };        // d^2F(vt)/dt^2 (should be independent of point and t)
+    { field.d2_dt2(v) };        // d^2F(vt)/dt^2 (should be independent of point and t)
 //    { field.valAndDiffs(x,v) }; // returns value and first and second order differentials [may be quicker to compute all together]
 };
 
@@ -176,12 +176,12 @@ template<class T>
 concept HigherOrderField = requires(T field, T::SpaceTime x, T::SpaceTime v) {
     requires Field<T>;
     { field.d_dt(x, v) };       // dF(x+vt)/dt at t=0
-    { field.d2_d2t(x, v) };     // d^2F(x+vt)/dt^2 at t=0
+    { field.d2_dt2(x, v) };     // d^2F(x+vt)/dt^2 at t=0
 //    { field.valAndDiffs(x,v) }; // returns value and first and second order differentials [may be quicker to compute all together]
 };
 
 template<class T>
-concept DifferentiableField = Field<T> && (FirstOrderField<T> || SecondOrderField<T> || HigherOrderField<T>); // For now, only these types of field
+concept DifferentiableField = FirstOrderField<T> || SecondOrderField<T> || HigherOrderField<T>; // For now, only these types of field
 
 
 template<class T>
@@ -202,18 +202,18 @@ template<class T>
 concept StaticSecondOrderField = requires(T::SpaceTime x, T::SpaceTime v) {
     requires StaticField<T>;
     { T::d_dt(x, v) };       // dF(x+vt)/dt at t=0
-    { T::d2_d2t(v) };        // d^2F(vt)/dt^2 (should be independent of point and t)
+//    { T::d2_dt2(v) };        // d^2F(vt)/dt^2 (should be independent of point and t)
 };
 
 template<class T>
 concept StaticHigherOrderField = requires(T::SpaceTime x, T::SpaceTime v) {
     requires StaticField<T>;
     { T::d_dt(x, v) };       // dF(x+vt)/dt at t=0
-    { T::d2_d2t(x, v) };     // d^2F(x+vt)/dt^2 at t=0
+    { T::d2_dt2(x, v) };     // d^2F(x+vt)/dt^2 at t=0
 };
 
 template<class T>
-concept StaticDifferentiableField = StaticField<T> && (StaticFirstOrderField<T> || StaticSecondOrderField<T> || StaticHigherOrderField<T>); // For now, only these types of field
+concept StaticDifferentiableField = (StaticFirstOrderField<T> || StaticSecondOrderField<T> || StaticHigherOrderField<T>); // For now, only these types of field
 
 
 // An inner product space is a spacetime that has an inner product with the properties
@@ -331,19 +331,16 @@ concept Trajectory = requires(T trajectory, T::SpaceTime point, T::Time time) {
 
 
 template<class T>
-concept Simulation = requires(T simulation, std::function<void()> runnable) {
-    typename T::Time;
+concept Environment = requires() {
     typename T::SpaceTime;
-    typename T::Trajectory;
     typename T::LambdaField;
-    typename T::BlockingField;
-    typename T::Metric;
+    typename T::Boundary;
     typename T::Executor;
     
-    requires Trajectory<typename T::Trajectory>;
+//    requires Trajectory<typename T::Trajectory>;
 
-    { T::executor.submit(runnable) };
-    { T::boundary };            // A boundary defines a global lambda that all agents execute on intersection but don't absorb
+    // { T::executor.submit(runnable) };
+    // { T::boundary };            // A boundary defines a global lambda that all agents execute on intersection but don't absorb
     // typename T::SpaceTime;
 
     // typename T::Trajectory;

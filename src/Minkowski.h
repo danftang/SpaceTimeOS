@@ -11,106 +11,106 @@
 // x.y = x_0.y_0 - sum_{i=1}^D x_dy_d
 //
 // In the absence of gravity, we live in a 4D Minkowski spacetime._
-template<uint DIMENSIONS, class SCALAR = double>
-class Minkowski : public std::array<SCALAR,DIMENSIONS> {
-public:
-    typedef Minkowski<DIMENSIONS,SCALAR>    Position;
-    typedef Minkowski<DIMENSIONS,SCALAR>    Velocity;
-    typedef SCALAR                          Time;
-    static constexpr uint Dimensions = DIMENSIONS;
+// template<uint DIMENSIONS, class SCALAR = double>
+// class Minkowski : public std::array<SCALAR,DIMENSIONS> {
+// public:
+//     typedef Minkowski<DIMENSIONS,SCALAR>    Position;
+//     typedef Minkowski<DIMENSIONS,SCALAR>    Velocity;
+//     typedef SCALAR                          Time;
+//     static constexpr uint Dimensions = DIMENSIONS;
 
-    // Default gives the reference origin 
-    Minkowski() {
-        for(int i=0; i<DIMENSIONS; ++i) (*this)[i] = 0;
-    }
+//     // Default gives the reference origin 
+//     Minkowski() {
+//         for(int i=0; i<DIMENSIONS; ++i) (*this)[i] = 0;
+//     }
 
-    // Constructing with a time gives the laboratory origin at a given time
-    // Constructing with 1 gives the laboratory 4-velocity
-    Minkowski(SCALAR laboratoryTime) {
-        (*this)[0] = laboratoryTime;
-        for(int i=1; i<DIMENSIONS; ++i) (*this)[i] = 0;
-    }
+//     // Constructing with a time gives the laboratory origin at a given time
+//     // Constructing with 1 gives the laboratory 4-velocity
+//     Minkowski(SCALAR laboratoryTime) {
+//         (*this)[0] = laboratoryTime;
+//         for(int i=1; i<DIMENSIONS; ++i) (*this)[i] = 0;
+//     }
 
-    Minkowski(const std::initializer_list<SCALAR> &init) {
-        int i=0;
-        for(const SCALAR &item : init) (*this)[i++] = item;
-        while(i < DIMENSIONS) (*this)[i++] = 0;
-    }
+//     Minkowski(const std::initializer_list<SCALAR> &init) {
+//         int i=0;
+//         for(const SCALAR &item : init) (*this)[i++] = item;
+//         while(i < DIMENSIONS) (*this)[i++] = 0;
+//     }
 
-    static constexpr uint size() { return DIMENSIONS; }
+//     static constexpr uint size() { return DIMENSIONS; }
 
-    // The ordering of a Minkowski space is given by x < y if 
-    // y is inside the future light cone of x.
-    bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
-        Minkowski<DIMENSIONS,SCALAR> displacement = other - *this;
-        return displacement*displacement >= 0 && displacement[0] > 0;
-    }
+//     // The ordering of a Minkowski space is given by x < y if 
+//     // y is inside the future light cone of x.
+//     bool operator <(const Minkowski<DIMENSIONS,SCALAR> &other) {
+//         Minkowski<DIMENSIONS,SCALAR> displacement = other - *this;
+//         return displacement*displacement >= 0 && displacement[0] > 0;
+//     }
 
-    explicit operator Time() const { return (*this)[0]; }
+//     explicit operator Time() const { return (*this)[0]; }
 
-    Minkowski<DIMENSIONS,SCALAR> operator -(const Minkowski<DIMENSIONS,SCALAR> &other) const {
-        Minkowski<DIMENSIONS,SCALAR> result;
-        for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] - other[i];
-        return result;
-    }
-
-
-    Minkowski<DIMENSIONS,SCALAR> operator +(const Minkowski<DIMENSIONS,SCALAR> &other) const {
-        Minkowski<DIMENSIONS,SCALAR> result;
-        for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] + other[i];
-        return result;
-    }
+//     Minkowski<DIMENSIONS,SCALAR> operator -(const Minkowski<DIMENSIONS,SCALAR> &other) const {
+//         Minkowski<DIMENSIONS,SCALAR> result;
+//         for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] - other[i];
+//         return result;
+//     }
 
 
-    // If this is a 4-velocity, then this returns the displacement of a clock moving at this velocity
-    // after it experiences properTime
-    Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime) const {
-        Minkowski<DIMENSIONS,SCALAR> result;
-        for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i]*properTime;
-        return result;
-    }
-
-    // inner product A*B = A0B0 - A1B1 - A2B2 ...
-    SCALAR operator *(const Minkowski<DIMENSIONS,SCALAR> &other) const {
-        SCALAR innerProd = (*this)[0]*other[0];
-        for(int i=1; i<DIMENSIONS; ++i) innerProd -= (*this)[i]*other[i];
-        return innerProd;
-    }
+//     Minkowski<DIMENSIONS,SCALAR> operator +(const Minkowski<DIMENSIONS,SCALAR> &other) const {
+//         Minkowski<DIMENSIONS,SCALAR> result;
+//         for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i] + other[i];
+//         return result;
+//     }
 
 
-    Minkowski<DIMENSIONS,SCALAR> &operator +=(const Minkowski<DIMENSIONS,SCALAR> &other) {
-        for(int i=0; i<DIMENSIONS; ++i) (*this)[i] += other[i];
-        return *this;
-    }
+//     // If this is a 4-velocity, then this returns the displacement of a clock moving at this velocity
+//     // after it experiences properTime
+//     Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime) const {
+//         Minkowski<DIMENSIONS,SCALAR> result;
+//         for(int i=0; i<DIMENSIONS; ++i) result[i] = (*this)[i]*properTime;
+//         return result;
+//     }
 
-    Minkowski<DIMENSIONS,SCALAR> &operator *=(SCALAR scale) {
-        for(int i=0; i<DIMENSIONS; ++i) (*this)[i] *= scale;
-        return *this;
-    }
-
-    Minkowski<DIMENSIONS,SCALAR> &operator /=(SCALAR scale) {
-        for(int i=0; i<DIMENSIONS; ++i) (*this)[i] /= scale;
-        return *this;
-    }
-
-    static inline const Minkowski<DIMENSIONS,SCALAR> TOP = Minkowski<DIMENSIONS,SCALAR>({ std::numeric_limits<SCALAR>::infinity() }); // NB: If we dont have infinity we have to make sure there's no overflow somehow
-    static inline const Minkowski<DIMENSIONS,SCALAR> BOTTOM = Minkowski<DIMENSIONS,SCALAR>({ -std::numeric_limits<SCALAR>::infinity() });
-
-    friend std::ostream &operator <<(std::ostream &out, const Minkowski<DIMENSIONS,SCALAR> &pos) {
-        out << "(";
-        for(int i=0; i<DIMENSIONS; ++i) out << pos[i] << " ";
-        out << ")";
-        return out;
-    }
-
-    friend Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime, const Minkowski<DIMENSIONS,SCALAR> &velocity) {
-        return velocity*properTime;
-    }
+//     // inner product A*B = A0B0 - A1B1 - A2B2 ...
+//     SCALAR operator *(const Minkowski<DIMENSIONS,SCALAR> &other) const {
+//         SCALAR innerProd = (*this)[0]*other[0];
+//         for(int i=1; i<DIMENSIONS; ++i) innerProd -= (*this)[i]*other[i];
+//         return innerProd;
+//     }
 
 
-};
+//     Minkowski<DIMENSIONS,SCALAR> &operator +=(const Minkowski<DIMENSIONS,SCALAR> &other) {
+//         for(int i=0; i<DIMENSIONS; ++i) (*this)[i] += other[i];
+//         return *this;
+//     }
 
-typedef Minkowski<1> GlobalTime; // 1-D Minkowski is the same as global time
+//     Minkowski<DIMENSIONS,SCALAR> &operator *=(SCALAR scale) {
+//         for(int i=0; i<DIMENSIONS; ++i) (*this)[i] *= scale;
+//         return *this;
+//     }
+
+//     Minkowski<DIMENSIONS,SCALAR> &operator /=(SCALAR scale) {
+//         for(int i=0; i<DIMENSIONS; ++i) (*this)[i] /= scale;
+//         return *this;
+//     }
+
+//     static inline const Minkowski<DIMENSIONS,SCALAR> TOP = Minkowski<DIMENSIONS,SCALAR>({ std::numeric_limits<SCALAR>::infinity() }); // NB: If we dont have infinity we have to make sure there's no overflow somehow
+//     static inline const Minkowski<DIMENSIONS,SCALAR> BOTTOM = Minkowski<DIMENSIONS,SCALAR>({ -std::numeric_limits<SCALAR>::infinity() });
+
+//     friend std::ostream &operator <<(std::ostream &out, const Minkowski<DIMENSIONS,SCALAR> &pos) {
+//         out << "(";
+//         for(int i=0; i<DIMENSIONS; ++i) out << pos[i] << " ";
+//         out << ")";
+//         return out;
+//     }
+
+//     friend Minkowski<DIMENSIONS,SCALAR> operator *(SCALAR properTime, const Minkowski<DIMENSIONS,SCALAR> &velocity) {
+//         return velocity*properTime;
+//     }
+
+
+// };
+
+// typedef Minkowski<1> GlobalTime; // 1-D Minkowski is the same as global time
 
 
 

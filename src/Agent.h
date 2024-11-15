@@ -1,9 +1,13 @@
 #ifndef AGENT_H
 #define AGENT_H
 
+#include <limits>
+
 #include "Concepts.h"
-#include "CallbackChannel.h"
+#include "SourceAgent.h"
 #include "Channel.h"
+#include "LinearTrajectory.h"
+#include "deselbystd/random.h"
 
 
 // An Agent is not much more than a vector field with registered writers
@@ -37,13 +41,12 @@
 //
 // Base class for all agents
 // 
-template<Simulation ENV>
-class Agent : public ENV::Trajectory {
+template<Environment ENV>
+class Agent : public SourceAgent<ENV> {
 public:
     typedef ENV::SpaceTime  SpaceTime;
-    typedef ENV::Time       Time;
+    typedef ENV::SpaceTime::Time       Time;
     typedef ENV             Environment;
-    typedef ENV::Trajectory Trajectory;
 
 
 
@@ -51,20 +54,18 @@ public:
     Agent(Agent<ENV> &&other) = delete;
 
     // Construct with current active agent's trajectory
-    Agent() : Trajectory(*activeAgent) {
-        // this will be called by activeAgent so no need to lock
-        activeAgent->callbackChannel.pushCallback(activeAgent->position(), this);
+    Agent() : SourceAgent<ENV>(*Simulation<ENV>::currentThreadAgent) {
+        // this will be called on currentThreadAgent's thread so no need to lock
+        Simulation<ENV>::currentThreadAgent->pCallbackBuffer->push(this);
     }
 
+    virtual ~Agent() {} // virtual so that we can delete agents on a callback queue.
+
     // needs to be virtual so we can delete an agent without knowing the derived type
-    virtual ~Agent() {
-        if(this == &boundaryAgent) callbackChannel.deleteCallbackAgents();
-        
-    } 
 
     // Attaches a ChannelReader to this object.
     void attach(ChannelExecutor<ENV> &&inChan) {
-        if(this->timeToIntersection(inChan.position()) < 0) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
+        if(this->timeToIntersection(inChan.getCallbackField()->asBlockingField()) < 0) throw(std::runtime_error("Attempt to attach channel to an agent's past"));
         inChannels.push_back(std::move(inChan));
     }
 
@@ -81,26 +82,28 @@ public:
         inChannels.pop_back();
     }
 
-    // Jumps to a given point (which must be in an agent's future light-cone)
-    // Once there, executes any lambdas that it now intersects, in order of
-    // increasing age of the channel, and increasing age of the lambda.
+    // Jumps to a given point in spacetime (which must be in an agent's future light-cone)
+    // without passing through any intermediate points.
+    // Once there, executes any lambdas that it now intersects in order of earliest
+    // at the current velocity (in its past) without moving.
     void jumpTo(const SpaceTime &newPosition) {
-        Trajectory::jumpTo(newPosition);
-        for(auto it = inChannels.rbegin(); it != inChannels.rend(); ++it) {
-            while(it->position() < newPosition) it->executeNext(*this);
-        }
+        assert(this->position() < newPosition);
+        this->updatePosition(newPosition);
     }
 
 
     // Execute this objects lambdas until it blocks
     void step() {
-        activeAgent = this; // set this to the active agent so all lambdas know where they are.
-        while(executeNextLambda()) { };
-        callbackChannel.updatePosition(this->position());
+        Simulation<ENV>::currentThreadAgent = this; // set this to the active agent so all lambdas know where they are.
+        std::shared_ptr<CallbackField<ENV>> blockingQueue;
+        do {
+            blockingQueue = executeNextLambda();
+        } while(!blockingQueue);
         if(inChannels.empty()) {
             std::cout << "Out of inCahnnels, deleting " << this << std::endl;
             delete(this); return; // no more inChannels
         }
+        blockingQueue->push(this); // push ourselves onto the queue of the agent we're blocking on and return immediately
     }
 
 
@@ -110,68 +113,79 @@ public:
     void die() { inChannels.clear(); }
 
 
-    // Starts simulation of all agents in environment ENV by
-    // submitting callbacks of all agents on the boundaryAgent.
-    static void start() {
-        boundaryAgent.advanceBy(boundaryAgent.timeToIntersection(ENV::boundary));
-        boundaryAgent.callbackChannel.updatePosition(boundaryAgent.position());
-    }
 
 
-    CallbackChannel<ENV>                callbackChannel;
-    static inline Agent<ENV>            boundaryAgent = Agent<ENV>(Trajectory(SpaceTime::BOTTOM));
+
+
+    // This is the agent on which notionally runs the main thread that starts/ends the computation.
+//    static inline Agent<ENV>            mainThreadAgent = Agent<ENV>(Trajectory(-sqrt(std::numeric_limits<typename SpaceTime::Time>::max())));
 private:
 
     std::vector<ChannelExecutor<ENV>>   inChannels;
 
-    static inline thread_local Agent<ENV> *activeAgent = &boundaryAgent; // each thread has an active agent on which it is currently running
+    // TODO: this need only be a callback field, could initially be the boundary (though this would be of a different type, damn)
 
-    friend ENV;
+    // friend ENV;
 
-    Agent(const Trajectory &trajectory) : Trajectory(trajectory) {
-        // SpaceTime displacementFromParent = trajectory.origin() - ENV::activeAgent->position();
-        // if(!(ENV::activeAgent->position() < trajectory.origin()))
-        //     throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
-        // sendCallbackTo(*ENV::activeAgent);
-    }
+    // Agent(const Trajectory &trajectory) : Trajectory(trajectory) {
+    //     // SpaceTime displacementFromParent = trajectory.origin() - ENV::currentThreadAgent->position();
+    //     // if(!(ENV::currentThreadAgent->position() < trajectory.origin()))
+    //     //     throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
+    //     // sendCallbackTo(*ENV::currentThreadAgent);
+    // }
 
 
     // finds the earliest channel and moves this to its intersection point,
     // detaching any closed channels as it goes.
     // If inChannels is empty, moves this to SpaceTime::TOP
-    bool executeNextLambda() {
-        bool didExecution;
-        auto chanIt = inChannels.begin();
-        auto end = inChannels.end();
-        auto earliestChanIt = inChannels.end();
-        SpaceTime earliestChanPos;
-        Time earliestIntersectionTime = this->timeToIntersection(ENV::boundary);
-        while(chanIt != end) {
-            if(chanIt->isClosed()) { 
-                --end; // mark closed channels for deletion without invalidating the end() iterator
-                if(chanIt != end) *chanIt = std::move(*end);
+    std::shared_ptr<CallbackField<ENV>> executeNextLambda() {
+        auto chanIt = inChannels.rbegin();
+        auto earliestChanIt = inChannels.rend();
+        int multiplicity = 1; // number of earliest channels found
+        std::shared_ptr<CallbackField<ENV>> earliestBlockingQueue = Simulation<ENV>::mainThread.getCallbackField(); // if we block on the boundary, add ouselves back to the mainThreadAgent
+        Time earliestIntersectionTime = this->timeToIntersection(Simulation<ENV>::boundary);
+        while(chanIt != inChannels.rend()) {
+            if(chanIt->isClosed()) {
+                if(chanIt != inChannels.rbegin()) *chanIt = std::move(inChannels.back()); // remove closed channels
+                ++chanIt;
+                inChannels.pop_back();
             } else {
-                SpaceTime chanPosition = chanIt->position();
-                Time intersectTime = this->timeToIntersection(chanPosition);
-                if(intersectTime <= earliestIntersectionTime) {
-                    earliestChanPos = chanPosition;
+                Time intersectTime;
+                std::shared_ptr<CallbackField<ENV>> pBlockingField;
+                if(chanIt->empty()) {
+                    pBlockingField = chanIt->getCallbackField();
+                    intersectTime = this->timeToIntersection(pBlockingField->asBlockingField());
+                } else {
+                    intersectTime = this->timeToIntersection(chanIt->asLambdaField());
+                }
+                if(intersectTime < earliestIntersectionTime) {
                     earliestIntersectionTime = intersectTime;
                     earliestChanIt = chanIt;
+                    earliestBlockingQueue = std::move(pBlockingField);
+                    multiplicity = 1;
+                } else if(intersectTime == earliestIntersectionTime && !pBlockingField) { // execute before blocking
+                    if(!earliestBlockingQueue) ++multiplicity;
+                    if(deselby::Random::nextDouble() < 1.0/multiplicity) { // choose between equal options with uniform random distribution
+                        earliestIntersectionTime = intersectTime;
+                        earliestChanIt = chanIt;
+                        earliestBlockingQueue.reset();
+                    }
                 }
                 ++chanIt;
             }
         }
-        if(earliestIntersectionTime > 0) this->advanceBy(earliestIntersectionTime);
-        if(earliestChanIt == inChannels.end()) {
-            // earliest channel is boundary
-            didExecution = false;
-            boundaryAgent.callbackChannel.pushCallback(boundaryAgent.position(), this);
-        } else {
-            didExecution = earliestChanIt->executeNext(*this);
-            if(!didExecution) earliestChanIt->pushCallback(earliestChanPos, this);
+        if(earliestIntersectionTime > 0) {
+            this->advanceBy(earliestIntersectionTime);
         }
-        inChannels.erase(end, inChannels.end()); // delete closed channels
-        return didExecution;
+        if(earliestChanIt != inChannels.rend() && !earliestBlockingQueue) {
+            // found a lambda so execute it
+            earliestChanIt->executeNext(*this);
+        }
+        // Three outcomes: 
+        //   - successfully executed: returns nullptr
+        //   - blocked on channel: returns ptr to channel callback queue
+        //   - blocked on boundary: returns ptr to boundary callback queue
+        return earliestBlockingQueue; // return shared pointer to callbackQueue or null
     }
 };
 

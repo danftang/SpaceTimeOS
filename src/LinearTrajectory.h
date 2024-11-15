@@ -24,23 +24,14 @@
 /// if they have an incoming connection from an agent on this trajecctory.
 /// The blockingfield should be constructible from a position
 /// @tparam METRICFIELD defines the velocity that
-template<DifferentiableField BLOCKINGFIELD, StaticDifferentiableField METRICFIELD>
+template<SpaceTime SPACETIME>
 class LinearTrajectory  {
 public:
-    typedef METRICFIELD::SpaceTime          SpaceTime;
-    typedef METRICFIELD::SpaceTime::Time    Time;
-//    typedef ENV::Velocity           Velocity; // Velocity should be a velocity of the metric
+    typedef SPACETIME          SpaceTime;
+    typedef SpaceTime::Time    Time;
 
 
-    LinearTrajectory(SpaceTime startPosition, Velocity<METRICFIELD> velocity = Velocity<METRICFIELD>()) : blockingField(std::move(startPosition)), vel(std::move(velocity)) { 
-        // TODO: absorb this into velocity type
-        if(fabs(velocity*velocity - 1) > 1e-6)
-            throw(std::runtime_error("Can't construct a LinearTrajectory with velocity that isn't of unit length"));
-        if(static_cast<Time>(velocity) < 0)
-            throw(std::runtime_error("Can't construct a LinearTrajectory with velocity that isn't future pointing in the laboratory frame"));
-        // SpaceTime displacementFromParent = position - ENV::activeAgent->position();
-        // if(displacementFromParent*displacementFromParent < 0)
-        //     throw(std::runtime_error("Can't construct an agent outside the future light-cone of the point of construction"));
+    LinearTrajectory(SpaceTime startPosition, Velocity<SpaceTime> velocity = Velocity<SpaceTime>()) : pos(std::move(startPosition)), vel(std::move(velocity)) { 
     }
 
 
@@ -111,30 +102,30 @@ public:
 
 
     void advanceBy(Time time) {
-        blockingField.origin += vel*time;
+        pos += vel*time;
     }
 
 
-    const Velocity & velocity() const { return vel; }
-    Velocity & velocity() { return vel; }
+    const Velocity<SpaceTime> & velocity() const { return vel; }
+    Velocity<SpaceTime> & velocity() { return vel; }
 
-    const SpaceTime &position() const { return blockingField.origin; }
+    const SpaceTime &position() const { return pos; }
 
     // tjread-safe position write with validity check for agent
-    inline void jumpTo(const VECTORSPACE &newPosition) {
+    inline void jumpTo(const SpaceTime &newPosition) {
         if(!(position() < newPosition)) {
             throw(std::runtime_error("An agent can only jumpTo a positions that are in its future light-cone."));
         }
-        blockingField.origin = newPosition;
+        pos = newPosition;
     }
 
     // The blocking field associated with the current position
-    const HomogeneousField<BLOCKINGFIELD> asField() { return blockingField; }
+//    const ShiftedField<ENV::LambdaField> &asField() { return blockingField; }
 
 
 protected:
-    BLOCKINGFIELD blockingField; // stores the current position as its origin
-    Velocity<METRICFIELD>    vel;
+    SpaceTime               pos; // TODO: pass pos to all methods, so that it can be stored elsewhere...?
+    Velocity<SpaceTime>     vel;
 };
 
 

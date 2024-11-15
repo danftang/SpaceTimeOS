@@ -11,15 +11,16 @@
 #include "SpatialFunction.h"
 #include "ThreadPool.h"
 #include "ThreadSafeQueue.h"
-#include "CallbackChannel.h"
+#include "SourceAgent.h"
 #include "predeclarations.h"
+#include "ShiftedField.h"
 
-template<class ENV> 
-class ChannelBuffer : public ThreadSafeQueue<SpatialFunction<ENV>> {
+template<Environment ENV> 
+class ChannelBuffer : public ThreadSafeQueue<SpatialFunction<ENV, typename Simulation<ENV>::TranslatedLambdaField>> {
 public:
     typedef typename ENV::SpaceTime SpaceTime;
 protected:
-    ChannelBuffer(Agent<ENV> &source) : source(&source.callbackChannel) { }
+    ChannelBuffer(CallbackChannel<ENV> &source) : source(&source) { }
 
     template<class T> requires std::same_as<typename T::Envoronment, ENV> friend class Channel; // only Channel can construct a new channel.
 public:
@@ -34,7 +35,7 @@ public:
 
 // This is used by the Agent class to read lambdas from a channel
 // Don't use these directly
-template<class ENV>
+template<Environment ENV>
 class ChannelExecutor {
 public:
     typedef ENV::SpaceTime SpaceTime;
@@ -87,12 +88,13 @@ public:
 
     // position of the front of the queue, or source if empty
     // nullptr if closed and empty
-    SpaceTime position() const {
-        assert(buffer != nullptr);
-        return (empty() ?
-            (buffer->source != nullptr ? buffer->source->position() : SpaceTime::TOP) 
-            : buffer->front().position());
-    }
+    // TODO: Don't ask position, ask timeToIntersection
+    // SpaceTime position() const {
+    //     assert(buffer != nullptr);
+    //     return (empty() ?
+    //         (buffer->source != nullptr ? buffer->source->position() : SpaceTime(std::numeric_limits<Time>::max())) 
+    //         : buffer->front().position());
+    // }
 
     bool empty() const { return buffer->empty(); }
 
@@ -100,28 +102,36 @@ public:
     // more calls on this channel.
     bool isClosed() const { return buffer->source == nullptr && empty(); }
 
-    inline void pushCallback(const SpaceTime &sourcePosition, Agent<ENV> *agentToCallback) {
+    // inline void pushCallback(Time callAfterLabTime, Agent<ENV> *agentToCallback) {
+    //     assert(buffer != nullptr);
+    //     assert(buffer->source != nullptr);
+    //     buffer->source->pushCallback(callAfterLabTime, agentToCallback);
+    // }
+
+
+    // A non-empty Channel has a lambda field which is the field on the front lambda
+    const auto &asLambdaField() {
         assert(buffer != nullptr);
-        assert(buffer->source != nullptr);
-        buffer->source->pushCallback(sourcePosition, agentToCallback);
+        assert(!buffer->empty());
+        return buffer->front().asField();
     }
 
-    // Scalar timeToIntersection(const SpaceTime &agentPosition, const SpaceTime &agentVelocity) const {
-    //     assert(buffer != nullptr);
-    //     return (empty() ?
-    //         (buffer->source != nullptr ? (buffer->source->position() - agentPosition) / agentVelocity : std::numeric_limits<Time>::max())
-    //         : buffer->front().timeToIntersection(agentPosition, agentVelocity));
-    // }
+    // A Channel has a blocking field defined by the channel source
+    std::shared_ptr<CallbackField<ENV>> getCallbackField() {
+        assert(buffer != nullptr);
+        assert(buffer->source != nullptr);
+        return buffer->source->getCallbackField();
+    }
 
     // Channel is a field [but what kind of field!?]...
 
-    template<class TRAJECTORY>
-    Time timeToIntersection(const TRAJECTORY &trajectory) {
-        assert(buffer != nullptr);
-        return empty()?
-            (buffer->source != nullptr ? trajectory.timeToIntersection(buffer->source->asField()) : std::numeric_limits<Time>::max())
-            : trajectory.timeToIntersection(buffer.front().asField());
-    }
+    // template<class TRAJECTORY>
+    // Time timeToIntersection(const TRAJECTORY &trajectory) {
+    //     assert(buffer != nullptr);
+    //     return empty()?
+    //         (buffer->source != nullptr ? trajectory.timeToIntersection(buffer->source->blockingField()) : std::numeric_limits<Time>::max())
+    //         : trajectory.timeToIntersection(buffer->front().asField());
+    // }
 
 
     friend std::ostream &operator <<(std::ostream &out, const ChannelExecutor<ENV> &in) {
@@ -148,6 +158,7 @@ protected:
 //   - runtime typesafe execution using std::any or wrap in std::variant, or have VariantChannelWriter (or VariantChannelReader)
 //   - If the channel holds the target pointer, then the buffer can hold runnables and the reader can be type unaware
 //     and we can merge AgentBase and Agent (though Agents would then need virtual destructors)
+// T is Target type, should be derived from Agent<ENV>
 template<class T>
 class Channel
 {
@@ -166,7 +177,7 @@ public:
     }
 
     // create a new channel to a remote target
-    Channel(Agent<Environment> &source, const Channel<T> &target) {
+    Channel(CallbackChannel<Environment> &source, const Channel<T> &target) {
         buffer = new ChannelBuffer<Environment>(source);
         target.send([reader = ChannelReader(buffer)](T &obj) mutable {
             obj.attach(std::move(reader));
@@ -174,11 +185,11 @@ public:
     }
 
     // attach a source to a remote reference
-    Channel(Agent<Environment> &source, RemoteReference<T> &target) : Channel(target.attachSource(source)) { 
+    Channel(CallbackChannel<Environment> &source, RemoteReference<T> &target) : Channel(target.attachSource(source)) { 
     }
 
     // create a new channel between two local agents
-    Channel(Agent<Environment> &source, T &target) {
+    Channel(CallbackChannel<Environment> &source, T &target) {
         buffer = new ChannelBuffer<Environment>(source);
         target.attach(ChannelExecutor(buffer));
     }
@@ -203,7 +214,7 @@ public:
     template<std::convertible_to<std::function<void(T &)>> LAMBDA>
     bool send(LAMBDA &&function) const {
         if(buffer == nullptr) return false;
-        buffer->emplace(buffer->source->position(), 
+        buffer->emplace(buffer->source->asLambdaField(), 
             [f = std::forward<LAMBDA>(function)](Agent<Environment> &target) { 
                 f(static_cast<T &>(target)); 
             });
@@ -218,7 +229,7 @@ public:
 
     const SpaceTime &sourcePosition() const {
         assert(buffer != nullptr);
-        return buffer->source->getPosition();
+        return buffer->source->getCallbackField()->asPosition();
     }
 
 
@@ -245,11 +256,11 @@ public:
 
     // create a new channel with a given target and a stub as source
     RemoteReference(const Channel<T> &target) : 
-        outChannel(*new Agent<Environment>(target.sourcePosition()), target) { }
+        outChannel(*new CallbackField<Environment>(target.sourcePosition()), target) { }
 
     // create a new channel to a local target
     RemoteReference(T &target) : 
-        outChannel(*new Agent<Environment>(target.getPosition()), target) { } // If we have a raw reference to target it must be in same position
+        outChannel(*new CallbackField<Environment>(target.position()), target) { } // If we have a raw reference to target it must be in same position
 
     RemoteReference(RemoteReference<T> &&other) : outChannel(std::move(other.outChannel)) { }
 
@@ -265,7 +276,7 @@ public:
         }
     }
 
-    Channel<T> attachSource(Agent<Environment> &source) {
+    Channel<T> attachSource(SourceAgent<Environment> &source) {
 //        std::cout << this << " Attaching to source " << &source << std::endl;
         assert(outChannel.buffer != nullptr);
         assert(outChannel.buffer->source != nullptr);

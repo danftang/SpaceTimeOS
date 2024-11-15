@@ -19,7 +19,7 @@ protected:
 public:
     ThreadSafePosition(const SPACETIME &position) : pos(position) {}
 
-    // agent read access need not be atomic
+    // agent read access need not be atomic as agent is only writer
     inline const SPACETIME &position() const { return pos; }
 
     // tjread-safe position write with validity check for agent

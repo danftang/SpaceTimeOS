@@ -116,7 +116,7 @@ and
 $$
 \Delta X . L >= 0
 $$
-for some constant vector $R >= 0$ and constant scalar $c>=0$. If multiple events occur at the same point in spacetime on the same agent, then the events are ordered by the order in which their channels were attached to the agent, starting with the most recently attached.
+for some constant vector $R >= 0$ and constant scalar $c>=0$. If multiple events occur at the same point in spacetime on the same agent, then the events are ordered pseudo-randomly.
 
 We can visualise this by thinking of an agent "emitting" a lambda function from its current position, $X_a$, creating a field in spacetime of the form $F(X) = (X - X_a - R).(X - X_a - R) - c$. As the target agent moves along its trajectory $X(t) = X_0 + Vt$ it "absorbs" (executes) the lambda at the point that its trajectory intersects the zero crossing of $F$. We can now see why Minkowski space is a good fit for our needs: when an agent emits a lambda function in Minkowski space, the zero crossing of $F$ describes a sphere centred on the point of emission which grows until it touches the target agent and is absorbed. In this way the transmission of information around spaceimte has a finite simulated speed, spacetime is local, and this is what aids us in parallelising the simulation.
 

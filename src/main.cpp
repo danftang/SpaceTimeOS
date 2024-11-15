@@ -1,28 +1,31 @@
 
 #include <iostream>
 
-#include "Minkowski.h"
+
 #include "ForwardSimulation.h"
 #include "Channel.h"
 #include "Agent.h"
 #include "LinearTrajectory.h"
+#include "Simulation.h"
 
-#include "TupleSpace.h"
-#include "MinkowskiField.h"
+#include "MinkowskiSpace.h"
+#include "InnerProdField.h"
 
 // First create a simulation type that defines the spacetime and the means of
 // executing events. Here we choose a 2 dimensional Minkowski spacetime
 // and a thread-pool consisting of 2 threads.
+
+typedef MinkowskiSpace<double,double> Minkowski;
+
 typedef ForwardSimulation<
-    LinearTrajectory<TupleSpace<double,double>>,
-    MinkowskiField<1.0,double,double>,
-    MinkowskiField<0.0,double,double>,
-    MinkowskiField<1.0,double,double>,
-    ThreadPool<0>>      MySimulation;
+    Minkowski,
+    InnerProdField<Minkowski,1.0>,
+    LabTimeBoundary<Minkowski,100.0>,
+    ThreadPool<0>>      MyEnvironment;
 
 // Now create a class derived from Agent to exist within the simulation.
 // This class just sends a ping to another agent.
-class Ping : public Agent<MySimulation> {
+class Ping : public Agent<MyEnvironment> {
 public:
     Channel<Ping> channelToOther;
 
@@ -37,40 +40,27 @@ public:
 };
 
 
-class MyClass {};
-class MyClass2 : public MyClass {
-    int x;
-};
 
 int main() {
+    std::cout << "Starting" << std::endl;
+    // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
+    Ping *alice = new Ping();
+    Ping *bob   = new Ping();
 
+    // set up the agent's initial positions
+    alice->jumpTo({0,0});
+    bob->jumpTo({0,1});
 
+    // now set the agent's member pointers to point to the other agent.
+    alice->channelToOther = Channel(*alice, *bob);
+    bob->channelToOther   = Channel(*bob, *alice);
 
-    TupleSpace<double,double> mySpace;
+    // Initialize the ping-pong by calling ping()
+    alice->ping();
 
-    MinkowskiField<1.0,double,double>::operator()(mySpace);
+    //Now start the simulation and set a the end of the simulation to be at time 100 in the laboroatory frame
+    Simulation<MyEnvironment>::start();
 
-    MinkowskiField<1.0,double,double>::d_dt(mySpace,mySpace);
-    MinkowskiField<1.0,double,double>::d2_dt2(mySpace);
-
-
-    // // First create two agents. Agents delete themselves so we can use new without worrying about memory leaks.
-    // Ping *alice = new Ping();
-    // Ping *bob   = new Ping();
-
-    // // set up the agent's initial positions
-    // alice->jumpTo({0,0});
-    // bob->jumpTo({0,1});
-
-    // // now set the agent's member pointers to point to the other agent.
-    // alice->channelToOther = Channel(*alice, *bob);
-    // bob->channelToOther   = Channel(*bob, *alice);
-
-    // // Initialize the ping-pong by calling ping()
-    // alice->ping();
-
-    // //Now start the simulation and set a the end of the simulation to be at time 100 in the laboroatory frame
-    // MySimulation::start(100);
-
-    return 0;
+     std::cout << "Finishing" << std::endl;
+   return 0;
 }
